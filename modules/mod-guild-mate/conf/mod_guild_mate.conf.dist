@@ -1,0 +1,72 @@
+########################################
+# GUILD MATE MODULE CONFIGURATION
+########################################
+
+#
+# GuildMate.Enable
+#     Description: Enable the Guild Mate module.
+#     Default:     1 - Enabled
+#                  0 - Disabled
+#
+
+GuildMate.Enable = 1
+
+#
+# GuildMate.StartupDelay
+#     Description: Delay in seconds after server startup before beginning
+#                  to log in Guild Mate characters. This allows Playerbots
+#                  to initialize first.
+#     Default:     60 (1 minute)
+#
+
+GuildMate.StartupDelay = 60
+
+#
+# GuildMate.LoginBatchSize
+#     Description: Number of Guild Mate characters to log in per batch.
+#                  Lower values reduce server load but increase total
+#                  login time.
+#     Default:     5
+#
+
+GuildMate.LoginBatchSize = 5
+
+#
+# GuildMate.LoginBatchDelay
+#     Description: Delay in milliseconds between login batches.
+#     Default:     1000 (1 second)
+#
+
+GuildMate.LoginBatchDelay = 1000
+
+#
+# GuildMate.GuildIds
+#     Description: Comma-separated list of guild IDs whose members should
+#                  be auto-logged as Guild Mates.
+#     REQUIRED:    This must be set for the module to function.
+#     Example:     "1,2,3" - Auto-log members of guilds 1, 2, and 3
+#     To find guild IDs: SELECT id, name FROM guild;
+#     Default:     "" (module will not log any characters until configured)
+#
+
+GuildMate.GuildIds = ""
+
+#
+# GuildMate.ExcludeRandomBotAccounts
+#     Description: Exclude characters on random bot accounts from being
+#                  logged as Guild Mates (to avoid duplication with
+#                  RandomBots).
+#     Default:     1 - Enabled
+#
+
+GuildMate.ExcludeRandomBotAccounts = 1
+
+#
+# GuildMate.IncludeOfflineOnly
+#     Description: Only log in characters that are not already online.
+#                  This prevents issues with duplicate logins and allows
+#                  human players to take priority.
+#     Default:     1 - Enabled
+#
+
+GuildMate.IncludeOfflineOnly = 1
