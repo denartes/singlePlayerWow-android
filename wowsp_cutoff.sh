@@ -517,6 +517,25 @@ for entry in "${MODULES[@]}"; do
     fi
 done
 
+# Clone mod-guild-mate from the singlePlayerWow-android repo (local Bygdok Eternal module)
+echo "Installing mod-guild-mate (Bygdok Eternal local module)..."
+TEMP_GUILDMATE_DIR="$HOME/temp_guildmate"
+rm -rf "$TEMP_GUILDMATE_DIR" 2>/dev/null || true
+if git clone --filter=blob:none --sparse https://github.com/denartes/singlePlayerWow-android.git "$TEMP_GUILDMATE_DIR" 2>/dev/null; then
+    cd "$TEMP_GUILDMATE_DIR"
+    git sparse-checkout set modules/mod-guild-mate 2>/dev/null
+    if [ -d "modules/mod-guild-mate" ]; then
+        cp -r modules/mod-guild-mate "$SOURCE_DIR/modules/"
+        echo "  mod-guild-mate installed successfully"
+    else
+        echo "  WARNING: mod-guild-mate directory not found in repository"
+    fi
+    cd "$HOME"
+    rm -rf "$TEMP_GUILDMATE_DIR"
+else
+    echo "  WARNING: Failed to clone mod-guild-mate"
+fi
+
 if [ ${#FAILED_MODULES[@]} -gt 0 ]; then
     print_warning "Some modules had issues: ${FAILED_MODULES[*]}"
     echo "The server will still work, but some features may be missing."
