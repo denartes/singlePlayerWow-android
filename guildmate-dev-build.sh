@@ -14,7 +14,6 @@ GUILDMATE_SRC="$REPO_DIR/modules/mod-guild-mate"
 GUILDMATE_DST="$SOURCE_DIR/modules/mod-guild-mate"
 BUILD_LOG="$HOME/guildmate-build.log"
 TMUX_SESSION="azeroth"
-TMUX_WINDOW="$TMUX_SESSION:0"
 
 # ── Timing ─────────────────────────────────────────────────────────────────────
 TOTAL_START=$(date +%s)
@@ -65,36 +64,61 @@ if [ ! -d "$SERVER_DIR" ]; then
 fi
 ok "Server dir: $SERVER_DIR"
 
-# ── helpers: locate panes in the azeroth session ─────────────────────────────
-# Returns the index of the first pane whose command matches a pattern.
-# Usage: find_pane_index <window> <grep-pattern>
-find_pane_index() {
-    local window="$1" pattern="$2"
-    tmux list-panes -t "$window" \
-        -F '#{pane_index} #{pane_current_command}' 2>/dev/null \
-        | awk -v p="$pattern" '$2 ~ p {print $1; exit}'
+# ── helpers: tmux pane identification ────────────────────────────────────────────
+# Returns pane ID(s) whose running process matches the pattern.
+# Uses pane_pid to get the actual shell PID, then looks at children via pgrep.
+# Usage: find_pane_by_process <session> <process-name>
+find_pane_by_process() {
+    local session="$1" procname="$2"
+    tmux list-panes -t "$session" -F '#{pane_id} #{pane_pid}' 2>/dev/null | while read -r pane_id pane_pid; do
+        # Check if this pane's process tree contains the target process
+        if pgrep -P "$pane_pid" -x "$procname" >/dev/null 2>&1 || \
+           [ "$(ps -p "$pane_pid" -o comm= 2>/dev/null)" = "$procname" ]; then
+            echo "$pane_id"
+        fi
+    done
+}
+
+# Check if authserver is running (either in tmux or as a process)
+is_authserver_running() {
+    pgrep -x "authserver" >/dev/null 2>&1
+}
+
+# Check if worldserver is running (either in tmux or as a process)
+is_worldserver_running() {
+    pgrep -x "worldserver" >/dev/null 2>&1
 }
 
 # ── 2. Stop worldserver (not authserver, not MariaDB) ─────────────────────────
 print_step "Stopping worldserver"
 
+# First, try to gracefully stop worldserver if it's in a tmux pane
 if tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
-    WS_PANE=$(find_pane_index "$TMUX_WINDOW" "worldserver")
-
-    if [ -n "$WS_PANE" ]; then
-        # Kill the pane directly — worldserver runs without a shell behind it,
-        # so C-c would just close the pane anyway; kill-pane is deterministic.
-        tmux kill-pane -t "${TMUX_WINDOW}.${WS_PANE}"
-        ok "Killed worldserver tmux pane ${TMUX_WINDOW}.${WS_PANE}"
+    # Find all panes running worldserver
+    WS_PANES=$(find_pane_by_process "$TMUX_SESSION" "worldserver")
+    
+    if [ -n "$WS_PANES" ]; then
+        for pane_id in $WS_PANES; do
+            # Send Ctrl-C to gracefully stop, then kill the pane
+            tmux send-keys -t "$pane_id" C-c 2>/dev/null || true
+            sleep 0.5
+            tmux kill-pane -t "$pane_id" 2>/dev/null || true
+            ok "Stopped worldserver pane $pane_id"
+        done
     else
-        ok "No worldserver pane found in session '$TMUX_SESSION' (already gone)"
+        ok "No worldserver pane found in tmux session"
     fi
+fi
 
-    # Belt-and-suspenders: kill any stray worldserver process not in tmux
-    pkill -f "bin/worldserver" 2>/dev/null || true
-else
-    pkill -f "bin/worldserver" 2>/dev/null || true
-    ok "No tmux session found; killed any stray worldserver process"
+# Kill any stray worldserver process not in tmux (or that didn't stop gracefully)
+if is_worldserver_running; then
+    pkill -x "worldserver" 2>/dev/null || true
+    sleep 1
+    # Force kill if still running
+    if is_worldserver_running; then
+        pkill -9 -x "worldserver" 2>/dev/null || true
+    fi
+    ok "Killed stray worldserver process"
 fi
 
 # ── 3. Snapshot source-file list before sync (for add/remove detection) ───────
@@ -220,28 +244,74 @@ if [ -f "$CONF_DIST_SRC" ]; then
 fi
 
 # ── 7. Restart worldserver ────────────────────────────────────────────────────
-print_step "Restarting worldserver"
+print_step "Starting AzerothCore servers"
 
-if tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
-    # The worldserver pane (if any) was already killed above.
-    # Create a fresh pane alongside whatever remains (authserver).
-    # -h splits horizontally; -c sets the working directory.
-    tmux split-window -h -t "$TMUX_WINDOW" \
-        -c "$SERVER_DIR" \
-        './bin/worldserver'
-    ok "worldserver launched in new tmux pane (${TMUX_WINDOW})"
-else
-    echo "  tmux session '$TMUX_SESSION' not found."
-    echo "  To start the full session:"
-    echo "    cd $SERVER_DIR"
-    echo "    tmux new-session -d -s $TMUX_SESSION './bin/authserver' \\"
-    echo "         \\; split-window -h -c '$SERVER_DIR' './bin/worldserver' \\"
-    echo "         \\; attach"
+# Ensure no stray worldserver is running before we start a new one
+if is_worldserver_running; then
+    pkill -9 -x "worldserver" 2>/dev/null || true
+    sleep 0.5
 fi
 
-# ── Summary ────────────────────────────────────────────────────────────────────
+start_full_session() {
+    # Create fresh tmux session with both authserver and worldserver
+    cd "$SERVER_DIR"
+    tmux new-session -d -c "$SERVER_DIR" -s "$TMUX_SESSION" './bin/authserver'
+    sleep 1  # Give authserver a moment to start
+    tmux split-window -h -t "$TMUX_SESSION" -c "$SERVER_DIR" './bin/worldserver'
+    ok "Created new tmux session '$TMUX_SESSION' with authserver + worldserver"
+}
+
+start_worldserver_pane() {
+    # Add worldserver pane to existing session
+    tmux split-window -h -t "$TMUX_SESSION" -c "$SERVER_DIR" './bin/worldserver'
+    ok "Added worldserver pane to existing session"
+}
+
+# CASE 1: tmux session exists
+if tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
+    # Check if authserver is running
+    if is_authserver_running; then
+        # Authserver is running - just add worldserver pane
+        start_worldserver_pane
+    else
+        # Authserver is NOT running - kill stale session and recreate
+        ok "Authserver not running, recreating full session"
+        tmux kill-session -t "$TMUX_SESSION" 2>/dev/null || true
+        start_full_session
+    fi
+# CASE 2: No tmux session - create it
+else
+    ok "No existing tmux session, creating new one"
+    start_full_session
+fi
+
+# Wait a moment and verify both processes are running
+sleep 2
+
 echo ""
 echo "════════════════════════════════════════"
 echo "  Guild Mate Dev Build — Complete"
 echo "  Total elapsed: $(elapsed)"
 echo "════════════════════════════════════════"
+echo ""
+
+# Final status check
+if is_authserver_running; then
+    echo "  ✓ Authserver running"
+else
+    echo "  ✗ Authserver NOT running" >&2
+fi
+
+if is_worldserver_running; then
+    echo "  ✓ Worldserver running"
+else
+    echo "  ✗ Worldserver NOT running" >&2
+fi
+
+if tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
+    echo "  ✓ Azeroth tmux session ready"
+    echo ""
+    echo "  tmux attach -t $TMUX_SESSION"
+else
+    echo "  ✗ Azeroth tmux session NOT found" >&2
+fi
