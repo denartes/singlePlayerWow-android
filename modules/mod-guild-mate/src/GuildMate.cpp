@@ -213,7 +213,7 @@ bool GuildMateMgr::IsCharacterOnline(ObjectGuid::LowType guid)
     return player && player->IsInWorld();
 }
 
-void GuildMateMgr::UpdateAIInternal(uint32 elapsed, bool minimal)
+void GuildMateMgr::UpdateAIInternal(uint32 /*elapsed*/, bool /*minimal*/)
 {
     if (!enabled || !initialized)
         return;
@@ -235,7 +235,6 @@ void GuildMateMgr::UpdateAIInternal(uint32 elapsed, bool minimal)
     // Process login queue
     if (!eligibleCharacters.empty() && loginQueueIndex < eligibleCharacters.size())
     {
-        time_t now = time(nullptr);
         uint32 nowMs = GameTime::GetGameTimeMS().count();
 
         // Check if enough time has passed since last batch
@@ -264,7 +263,6 @@ void GuildMateMgr::UpdateAIInternal(uint32 elapsed, bool minimal)
 void GuildMateMgr::ProcessLoginBatch()
 {
     uint32 loggedIn = 0;
-    uint32 batchStart = loginQueueIndex;
 
     while (loginQueueIndex < eligibleCharacters.size() && loggedIn < loginBatchSize)
     {
@@ -358,7 +356,7 @@ bool GuildMateMgr::IsUnderPlayerControl(Player* bot)
         return false;
 
     Player* master = ai->GetMaster();
-    if (!master || !master->IsInWorld() || master->GetPlayerbotAI())
+    if (!master || !master->IsInWorld() || GET_PLAYERBOT_AI(master))
         return false;
 
     // Bot must be in the same group as the real player master
