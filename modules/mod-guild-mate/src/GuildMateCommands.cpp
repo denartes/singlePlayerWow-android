@@ -247,12 +247,15 @@ public:
                     WorldObject* obj = rpgTarget.GetWorldObject();
                     if (obj)
                     {
-                        handler->PSendSysMessage("RPG Target: {} ({})", 
-                            obj->GetName(), rpgTarget.ToString());
+                        handler->PSendSysMessage("RPG Target: {} (map:{} x:{:.1f} y:{:.1f})", 
+                            obj->GetName(), rpgTarget.getMapId(), rpgTarget.getX(), rpgTarget.getY());
                     }
                     else
                     {
-                        handler->PSendSysMessage("RPG Target GUID: {}", rpgTarget.ToString());
+                        // Object not loaded - show GUID and position
+                        handler->PSendSysMessage("RPG Target GUID: {} (map:{} x:{:.1f} y:{:.1f})",
+                            static_cast<ObjectGuid const&>(rpgTarget).ToString(),
+                            rpgTarget.getMapId(), rpgTarget.getX(), rpgTarget.getY());
                     }
                 }
             }
