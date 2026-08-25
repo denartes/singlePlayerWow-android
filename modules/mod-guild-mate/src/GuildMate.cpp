@@ -323,6 +323,12 @@ void GuildMateMgr::OnBotLoginInternal(Player* const bot)
     // Ensure the bot can gain XP (unlike fixed-level RandomBots)
     bot->RemovePlayerFlag(PLAYER_FLAGS_NO_XP_GAIN);
 
+    // Set randomize event to prevent ProcessBot from re-randomizing this bot's gear
+    // Guild Mate bots are player alts with real gear, not randomly generated bots
+    uint32 botId = bot->GetGUID().GetCounter();
+    sRandomPlayerbotMgr->SetEventValue(botId, "randomize", 1,
+                                        sPlayerbotAIConfig->maxRandomBotRandomizeTime);
+
     // Get the PlayerbotAI for this bot (created by PlayerbotHolder::OnBotLogin())
     PlayerbotAI* ai = GET_PLAYERBOT_AI(bot);
     if (ai)
@@ -357,7 +363,6 @@ void GuildMateMgr::OnBotLoginInternal(Player* const bot)
     if (teleportOnLogin)
     {
         sRandomPlayerbotMgr->RandomTeleportForLevel(bot);
-        lastTeleportTime[bot->GetGUID().GetCounter()] = time(nullptr);
         LOG_INFO("module.guildmate", "Guild Mate: {} teleported to level-appropriate zone", bot->GetName());
     }
 }
@@ -408,8 +413,6 @@ void GuildMateMgr::RestoreAutonomy(Player* bot)
 
 void GuildMateMgr::ReconcileAutonomy()
 {
-    time_t now = time(nullptr);
-
     for (auto& [accountId, bot] : playerBots)
     {
         if (!bot || !bot->IsInWorld())
@@ -433,27 +436,12 @@ void GuildMateMgr::ReconcileAutonomy()
             RestoreAutonomy(bot);
         }
 
-        // Periodic teleportation for autonomous bots (like RandomBots)
-        if (periodicTeleport && !underControl && !bot->InBattleground() && !bot->GetGroup())
+        // Let RandomPlayerbotMgr handle maintenance for autonomous Guild Mate bots
+        // This gives them full random bot treatment: revive dead bots, teleport idle bots, refresh, etc.
+        // Controlled by GuildMate.PeriodicTeleport config option
+        if (periodicTeleport && !underControl && !bot->GetGroup())
         {
-            // Check if enough time has passed since last teleport
-            time_t lastTele = lastTeleportTime.count(lowGuid) ? lastTeleportTime[lowGuid] : 0;
-            uint32 teleportInterval = urand(
-                sPlayerbotAIConfig->minRandomBotTeleportInterval,
-                sPlayerbotAIConfig->maxRandomBotTeleportInterval);
-
-            if (now - lastTele >= teleportInterval)
-            {
-                // Check if bot is idle (not actively doing something useful)
-                PlayerbotAI* ai = GET_PLAYERBOT_AI(bot);
-                if (ai && !bot->IsInCombat() && !bot->isDead())
-                {
-                    sRandomPlayerbotMgr->RandomTeleportForLevel(bot);
-                    lastTeleportTime[lowGuid] = now;
-                    LOG_DEBUG("module.guildmate", "Guild Mate: {} periodic teleport to level-appropriate zone",
-                              bot->GetName());
-                }
-            }
+            sRandomPlayerbotMgr->ProcessBot(bot);
         }
     }
 }

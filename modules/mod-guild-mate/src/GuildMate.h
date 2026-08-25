@@ -100,9 +100,6 @@ private:
 
     // Tracks bots currently under legitimate player control
     std::unordered_set<ObjectGuid::LowType> playerControlledBots;
-
-    // Tracks last teleport time for periodic teleportation
-    std::unordered_map<ObjectGuid::LowType, time_t> lastTeleportTime;
 };
 
 #define sGuildMateMgr GuildMateMgr::instance()

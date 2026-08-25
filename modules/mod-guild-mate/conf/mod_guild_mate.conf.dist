@@ -85,13 +85,13 @@ GuildMate.TeleportOnLogin = 1
 
 #
 # GuildMate.PeriodicTeleport
-#     Description: Periodically teleport autonomous Guild Mate bots to new
-#                  level-appropriate zones (like RandomBots do). This helps
-#                  bots progress when they've exhausted content in their
-#                  current area. Uses the same intervals as RandomBots:
-#                  AiPlayerbot.MinRandomBotTeleportInterval and
-#                  AiPlayerbot.MaxRandomBotTeleportInterval.
-#                  Only applies to autonomous bots (not under player control).
+#     Description: Enable full RandomBot-style maintenance for autonomous Guild Mate bots.
+#                  When enabled, Guild Mate bots get the same treatment as random bots:
+#                  - Dead bots are revived and teleported to level-appropriate zones
+#                  - Idle bots are periodically teleported to new areas
+#                  - Bots are refreshed (health, mana, durability, gold)
+#                  Uses the same intervals and logic as RandomBots via ProcessBot().
+#                  Only applies to autonomous bots (not under player control or in groups).
 #     Default:     1 - Enabled
 #
 

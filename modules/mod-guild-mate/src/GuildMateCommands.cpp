@@ -14,6 +14,7 @@
 // Playerbots includes for inspect command
 #include "Playerbots.h"
 #include "PlayerbotAI.h"
+#include "RandomPlayerbotMgr.h"
 #include "TravelMgr.h"
 
 using namespace Acore::ChatCommands;
@@ -290,6 +291,50 @@ public:
         std::vector<const Quest*> incompleteQuests = ai->GetCurrentIncompleteQuests();
         handler->PSendSysMessage("Quests: {} total, {} incomplete", 
             allQuests.size(), incompleteQuests.size());
+
+        // ========== RANDOMPLAYERBOTMGR EVENTS ==========
+        // These events control how ProcessBot() handles maintenance
+        uint32 botId = target->GetGUID().GetCounter();
+        uint32 deadEvent = sRandomPlayerbotMgr->GetEventValue(botId, "dead");
+        uint32 reviveEvent = sRandomPlayerbotMgr->GetEventValue(botId, "revive");
+        uint32 teleportEvent = sRandomPlayerbotMgr->GetEventValue(botId, "teleport");
+        uint32 randomizeEvent = sRandomPlayerbotMgr->GetEventValue(botId, "randomize");
+        uint32 updateEvent = sRandomPlayerbotMgr->GetEventValue(botId, "update");
+
+        handler->PSendSysMessage("=== ProcessBot Events ===");
+        handler->PSendSysMessage("  dead: {} | revive: {} | teleport: {} | randomize: {} | update: {}",
+            deadEvent, reviveEvent, teleportEvent, randomizeEvent, updateEvent);
+
+        // Show if this bot would be processed by RandomPlayerbotMgr
+        bool isRandomBot = sRandomPlayerbotMgr->IsRandomBot(target);
+        bool isGuildMate = sGuildMateMgr->IsGuildMate(target);
+        bool inGroup = target->GetGroup() != nullptr;
+        bool isDead = target->isDead();
+        bool inBG = target->InBattleground();
+
+        handler->PSendSysMessage("  IsRandomBot: {} | IsGuildMate: {} | InGroup: {} | Dead: {} | InBG: {}",
+            isRandomBot ? "yes" : "no",
+            isGuildMate ? "yes" : "no",
+            inGroup ? "yes" : "no",
+            isDead ? "yes" : "no",
+            inBG ? "yes" : "no");
+
+        // Summary of maintenance eligibility
+        if (isGuildMate && !inGroup && !inBG)
+        {
+            handler->PSendSysMessage("  ProcessBot: ELIGIBLE (GuildMate maintenance active)");
+            if (isDead && !reviveEvent)
+                handler->PSendSysMessage("  -> Bot is DEAD and due for REVIVE");
+            else if (isDead)
+                handler->PSendSysMessage("  -> Bot is DEAD, revive scheduled");
+            else if (!teleportEvent)
+                handler->PSendSysMessage("  -> Bot is due for TELEPORT");
+        }
+        else
+        {
+            handler->PSendSysMessage("  ProcessBot: NOT ELIGIBLE ({})",
+                inGroup ? "in group" : (inBG ? "in battleground" : "not a GuildMate"));
+        }
 
         return true;
     }
