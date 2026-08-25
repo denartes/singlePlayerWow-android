@@ -14,7 +14,7 @@ GUILDMATE_SRC="$REPO_DIR/modules/mod-guild-mate"
 GUILDMATE_DST="$SOURCE_DIR/modules/mod-guild-mate"
 BUILD_LOG="$HOME/guildmate-build.log"
 TMUX_SESSION="azeroth"
-WORLDSERVER_PANE="$TMUX_SESSION:0.1"
+TMUX_WINDOW="$TMUX_SESSION:0"
 
 # ── Timing ─────────────────────────────────────────────────────────────────────
 TOTAL_START=$(date +%s)
@@ -65,24 +65,48 @@ if [ ! -d "$SERVER_DIR" ]; then
 fi
 ok "Server dir: $SERVER_DIR"
 
+# ── helpers: locate panes in the azeroth session ─────────────────────────────
+# Returns the index of the first pane whose command matches a pattern.
+# Usage: find_pane_index <window> <grep-pattern>
+find_pane_index() {
+    local window="$1" pattern="$2"
+    tmux list-panes -t "$window" \
+        -F '#{pane_index} #{pane_current_command}' 2>/dev/null \
+        | awk -v p="$pattern" '$2 ~ p {print $1; exit}'
+}
+
 # ── 2. Stop worldserver (not authserver, not MariaDB) ─────────────────────────
 print_step "Stopping worldserver"
 
-WORLDSERVER_STOPPED=false
 if tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
-    # Send Ctrl-C to the worldserver pane and wait briefly
-    tmux send-keys -t "$WORLDSERVER_PANE" C-c 2>/dev/null || true
-    sleep 2
-    # Fallback: kill by process name if still running
+    WS_PANE=$(find_pane_index "$TMUX_WINDOW" "worldserver")
+
+    if [ -n "$WS_PANE" ]; then
+        # Kill the pane directly — worldserver runs without a shell behind it,
+        # so C-c would just close the pane anyway; kill-pane is deterministic.
+        tmux kill-pane -t "${TMUX_WINDOW}.${WS_PANE}"
+        ok "Killed worldserver tmux pane ${TMUX_WINDOW}.${WS_PANE}"
+    else
+        ok "No worldserver pane found in session '$TMUX_SESSION' (already gone)"
+    fi
+
+    # Belt-and-suspenders: kill any stray worldserver process not in tmux
     pkill -f "bin/worldserver" 2>/dev/null || true
-    sleep 1
-    WORLDSERVER_STOPPED=true
-    ok "Sent stop signal to worldserver pane ($WORLDSERVER_PANE)"
 else
-    # No tmux session — just kill any stray worldserver process
     pkill -f "bin/worldserver" 2>/dev/null || true
     ok "No tmux session found; killed any stray worldserver process"
 fi
+
+# ── 3. Snapshot source-file list before sync (for add/remove detection) ───────
+# CMake may use GLOB_RECURSE in the module's CMakeLists.txt, which means CMake
+# itself won't detect added/removed source files without re-running configure.
+# Capture the sorted file list before and after sync to catch this case.
+list_src_files() {
+    find "$1" -type f \( -name '*.cpp' -o -name '*.h' \) 2>/dev/null \
+        | sed "s|$1/||" | sort
+}
+
+BEFORE_FILES=$(list_src_files "$GUILDMATE_DST")
 
 # ── 3. Sync Guild Mate source ──────────────────────────────────────────────────
 print_step "Syncing Guild Mate source → $GUILDMATE_DST"
@@ -96,23 +120,33 @@ else
     ok "cp complete (rsync not available)"
 fi
 
+AFTER_FILES=$(list_src_files "$GUILDMATE_DST")
+
 # ── 4. Detect whether cmake reconfiguration is needed ─────────────────────────
 print_step "Checking for CMake reconfiguration need"
 
 NEEDS_CMAKE=false
+NEEDS_CMAKE_REASON=""
 
-# CMake reconfiguration is needed if CMakeLists.txt or include.sh
-# in the guild-mate module is newer than the existing CMakeCache.
+# Trigger 1: CMakeLists.txt or include.sh changed (build rules or flags changed)
 for trigger_file in \
         "$GUILDMATE_DST/CMakeLists.txt" \
         "$GUILDMATE_DST/include.sh"; do
     if [ -f "$trigger_file" ] && [ "$trigger_file" -nt "$BUILD_DIR/CMakeCache.txt" ]; then
-        echo "  CMake trigger: $(basename "$trigger_file") is newer than CMakeCache.txt"
         NEEDS_CMAKE=true
+        NEEDS_CMAKE_REASON="$(basename "$trigger_file") is newer than CMakeCache.txt"
     fi
 done
 
+# Trigger 2: source-file set changed (file added or removed).
+# Required because GLOB_RECURSE in CMakeLists.txt won't re-evaluate without reconfigure.
+if [ "$BEFORE_FILES" != "$AFTER_FILES" ]; then
+    NEEDS_CMAKE=true
+    NEEDS_CMAKE_REASON="source file set changed (added/removed .cpp or .h)"
+fi
+
 if [ "$NEEDS_CMAKE" = true ]; then
+    echo "  Reason: $NEEDS_CMAKE_REASON"
     echo "  Running cmake configure with original flags..."
     cd "$BUILD_DIR"
     # Exact flags from wowsp_cutoff.sh
@@ -125,7 +159,7 @@ if [ "$NEEDS_CMAKE" = true ]; then
         -DCMAKE_EXE_LINKER_FLAGS="-Wl,--allow-multiple-definition -lunwind"
     ok "CMake reconfigure: yes"
 else
-    ok "CMake reconfigure: no (source file changes only)"
+    ok "CMake reconfigure: no (existing source files changed only)"
 fi
 
 # ── 5. Incremental worldserver build ──────────────────────────────────────────
@@ -176,21 +210,32 @@ cp "$BUILT_BINARY" "$SERVER_DIR/bin/worldserver"
 chmod +x "$SERVER_DIR/bin/worldserver"
 ok "Installed: $SERVER_DIR/bin/worldserver"
 
+# ── 6b. Update .conf.dist (safe — never touches the live .conf) ───────────────
+CONF_DIST_SRC="$GUILDMATE_SRC/conf/mod_guild_mate.conf.dist"
+CONF_DIST_DST="$SERVER_DIR/etc/modules/mod_guild_mate.conf.dist"
+if [ -f "$CONF_DIST_SRC" ]; then
+    mkdir -p "$SERVER_DIR/etc/modules"
+    cp "$CONF_DIST_SRC" "$CONF_DIST_DST"
+    ok "Updated: $CONF_DIST_DST (live .conf untouched)"
+fi
+
 # ── 7. Restart worldserver ────────────────────────────────────────────────────
 print_step "Restarting worldserver"
 
 if tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
-    # Clear the pane and relaunch worldserver from the server directory
-    tmux send-keys -t "$WORLDSERVER_PANE" "" Enter 2>/dev/null || true
-    sleep 1
-    tmux send-keys -t "$WORLDSERVER_PANE" "cd $SERVER_DIR && ./bin/worldserver" Enter
-    ok "worldserver restarted in tmux pane $WORLDSERVER_PANE"
+    # The worldserver pane (if any) was already killed above.
+    # Create a fresh pane alongside whatever remains (authserver).
+    # -h splits horizontally; -c sets the working directory.
+    tmux split-window -h -t "$TMUX_WINDOW" \
+        -c "$SERVER_DIR" \
+        './bin/worldserver'
+    ok "worldserver launched in new tmux pane (${TMUX_WINDOW})"
 else
     echo "  tmux session '$TMUX_SESSION' not found."
-    echo "  Start the full session with:"
+    echo "  To start the full session:"
     echo "    cd $SERVER_DIR"
     echo "    tmux new-session -d -s $TMUX_SESSION './bin/authserver' \\"
-    echo "         \\; split-window -h './bin/worldserver' \\"
+    echo "         \\; split-window -h -c '$SERVER_DIR' './bin/worldserver' \\"
     echo "         \\; attach"
 fi
 
