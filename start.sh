@@ -1,7 +1,7 @@
 #!/bin/bash
 # Fast incremental Guild Mate development build for Android/Termux.
 # Requires an initial full build via wowsp_cutoff.sh.
-# Usage: bash guildmate-dev-build.sh
+# Usage: ./start.sh
 
 set -e
 
@@ -22,6 +22,38 @@ elapsed() { echo $(( $(date +%s) - TOTAL_START ))s; }
 print_step() { echo ""; echo "▶ $1"; }
 ok()         { echo "  ✓ $1"; }
 fail()       { echo "  ✗ $1" >&2; }
+
+# ── MariaDB functions (adapted from wowsp_cutoff.sh) ───────────────────────────
+# Check if MariaDB is running
+check_mariadb_running() {
+    pgrep -f "mariadbd" > /dev/null 2>&1
+}
+
+# Start MariaDB if not running and wait for it to be ready
+ensure_mariadb_running() {
+    if check_mariadb_running; then
+        ok "MariaDB already running"
+        return 0
+    fi
+
+    echo "  Starting MariaDB..."
+    mariadbd-safe --datadir="$PREFIX/var/lib/mysql" &
+
+    # Wait for MariaDB to be ready (up to 30 seconds)
+    local i
+    for i in {1..30}; do
+        if mariadb -u root -e "SELECT 1;" >/dev/null 2>&1; then
+            ok "MariaDB started"
+            return 0
+        fi
+        printf "."
+        sleep 1
+    done
+
+    echo ""
+    fail "MariaDB failed to start within 30 seconds"
+    return 1
+}
 
 echo "════════════════════════════════════════"
 echo "  Guild Mate Dev Build"
@@ -243,7 +275,15 @@ if [ -f "$CONF_DIST_SRC" ]; then
     ok "Updated: $CONF_DIST_DST (live .conf untouched)"
 fi
 
-# ── 7. Restart worldserver ────────────────────────────────────────────────────
+# ── 7. Ensure MariaDB is running ──────────────────────────────────────────────
+print_step "Ensuring MariaDB is running"
+
+if ! ensure_mariadb_running; then
+    fail "Cannot start AzerothCore servers without MariaDB"
+    exit 1
+fi
+
+# ── 8. Restart worldserver ────────────────────────────────────────────────────
 print_step "Starting AzerothCore servers"
 
 # Ensure no stray worldserver is running before we start a new one
@@ -286,7 +326,25 @@ else
 fi
 
 # Wait a moment and verify both processes are running
-sleep 2
+sleep 3
+
+# Check if servers survived startup
+STARTUP_OK=true
+
+if ! is_authserver_running; then
+    fail "Authserver failed to start (check MariaDB connection)"
+    STARTUP_OK=false
+fi
+
+if ! is_worldserver_running; then
+    fail "Worldserver failed to start (check MariaDB connection)"
+    STARTUP_OK=false
+fi
+
+if ! tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
+    fail "Tmux session '$TMUX_SESSION' disappeared"
+    STARTUP_OK=false
+fi
 
 echo ""
 echo "════════════════════════════════════════"
@@ -295,23 +353,22 @@ echo "  Total elapsed: $(elapsed)"
 echo "════════════════════════════════════════"
 echo ""
 
-# Final status check
-if is_authserver_running; then
+if [ "$STARTUP_OK" = true ]; then
     echo "  ✓ Authserver running"
-else
-    echo "  ✗ Authserver NOT running" >&2
-fi
-
-if is_worldserver_running; then
     echo "  ✓ Worldserver running"
-else
-    echo "  ✗ Worldserver NOT running" >&2
-fi
-
-if tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
     echo "  ✓ Azeroth tmux session ready"
     echo ""
     echo "  tmux attach -t $TMUX_SESSION"
 else
-    echo "  ✗ Azeroth tmux session NOT found" >&2
+    echo ""
+    fail "Server startup failed. Check logs for details."
+    echo "  Possible causes:"
+    echo "    - MariaDB connection issues"
+    echo "    - Missing or corrupted database"
+    echo "    - Configuration errors in worldserver.conf"
+    echo ""
+    echo "  To debug, try running servers manually:"
+    echo "    cd $SERVER_DIR"
+    echo "    ./bin/authserver"
+    exit 1
 fi

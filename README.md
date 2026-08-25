@@ -24,11 +24,12 @@ To run the server again after a restart, you can just use same script `bash ~/wo
 After the initial full build via `wowsp_cutoff.sh`, use the fast incremental script for Guild Mate iteration:
 
 ```bash
+cd ~/bygdok-build
 git pull
-bash guildmate-dev-build.sh
+./start.sh
 ```
 
-This syncs only `modules/mod-guild-mate`, rebuilds only the affected targets, installs the new `worldserver` binary, and restarts the worldserver — without touching databases, configs, data files, or other modules. Build output is logged to `~/guildmate-build.log`.
+This syncs only `modules/mod-guild-mate`, rebuilds only the affected targets, installs the new `worldserver` binary, ensures MariaDB is running, and restarts the AzerothCore servers — without touching databases, configs, data files, or other modules. Build output is logged to `~/guildmate-build.log`.
 
 ---
 
