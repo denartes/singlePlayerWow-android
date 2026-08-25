@@ -19,7 +19,20 @@ Should take care of everything automatically. Connect with ChromieCraft 3.3.5a t
 
 To run the server again after a restart, you can just use same script `bash ~/wowsp_cutoff.sh` (It will take care of mariadb startup and tmux sessions)
 
-## Manual installation if script does not work
+## Guild Mate development (incremental builds)
+
+After the initial full build via `wowsp_cutoff.sh`, use the fast incremental script for Guild Mate iteration:
+
+```bash
+git pull
+bash guildmate-dev-build.sh
+```
+
+This syncs only `modules/mod-guild-mate`, rebuilds only the affected targets, installs the new `worldserver` binary, and restarts the worldserver — without touching databases, configs, data files, or other modules. Build output is logged to `~/guildmate-build.log`.
+
+---
+
+
 
 You need to install the build and runtime dependencies:
 

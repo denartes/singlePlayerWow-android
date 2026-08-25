@@ -69,6 +69,11 @@ private:
     // Check if character is already online
     bool IsCharacterOnline(ObjectGuid::LowType guid);
 
+    // Autonomy lifecycle
+    bool IsUnderPlayerControl(Player* bot);
+    void RestoreAutonomy(Player* bot);
+    void ReconcileAutonomy();
+
     // Configuration
     bool enabled;
     uint32 startupDelay;
@@ -89,6 +94,9 @@ private:
     std::unordered_set<ObjectGuid::LowType> guildMateGuids;
     std::unordered_set<uint32> excludedAccounts;
     uint32 loginQueueIndex;
+
+    // Tracks bots currently under legitimate player control
+    std::unordered_set<ObjectGuid::LowType> playerControlledBots;
 };
 
 #define sGuildMateMgr GuildMateMgr::instance()

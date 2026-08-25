@@ -8,6 +8,7 @@
 #include "GuildMate.h"
 
 #include "CharacterCache.h"
+#include "Group.h"
 #include "Config.h"
 #include "DatabaseEnv.h"
 #include "GameTime.h"
@@ -251,6 +252,9 @@ void GuildMateMgr::UpdateAIInternal(uint32 elapsed, bool minimal)
     {
         // All logins complete, check less frequently
         SetNextCheckDelay(5000);
+
+        // Periodically reconcile autonomy for all online Guild Mates
+        ReconcileAutonomy();
     }
 
     // Update bot sessions
@@ -344,6 +348,77 @@ void GuildMateMgr::OnBotLoginInternal(Player* const bot)
 
         // Remove follow strategy since we're autonomous (no master)
         ai->ChangeStrategy("-follow", BOT_STATE_NON_COMBAT);
+    }
+}
+
+bool GuildMateMgr::IsUnderPlayerControl(Player* bot)
+{
+    PlayerbotAI* ai = GET_PLAYERBOT_AI(bot);
+    if (!ai)
+        return false;
+
+    Player* master = ai->GetMaster();
+    if (!master || !master->IsInWorld() || master->GetPlayerbotAI())
+        return false;
+
+    // Bot must be in the same group as the real player master
+    Group* group = bot->GetGroup();
+    if (!group)
+        return false;
+
+    return group->IsMember(master->GetGUID());
+}
+
+void GuildMateMgr::RestoreAutonomy(Player* bot)
+{
+    if (bot->IsInCombat())
+        return;
+
+    PlayerbotAI* ai = GET_PLAYERBOT_AI(bot);
+    if (!ai)
+        return;
+
+    ai->SetMaster(nullptr);
+    ai->ResetStrategies();
+
+    ai->ChangeStrategy("+grind", BOT_STATE_NON_COMBAT);
+
+    if (sPlayerbotAIConfig->enableNewRpgStrategy)
+        ai->ChangeStrategy("+new rpg", BOT_STATE_NON_COMBAT);
+    else if (sPlayerbotAIConfig->autoDoQuests)
+        ai->ChangeStrategy("+rpg", BOT_STATE_NON_COMBAT);
+    else
+        ai->ChangeStrategy("+move random", BOT_STATE_NON_COMBAT);
+
+    ai->ChangeStrategy("-follow", BOT_STATE_NON_COMBAT);
+
+    LOG_INFO("module.guildmate", "Guild Mate: {} restored to autonomous state from current position", bot->GetName());
+}
+
+void GuildMateMgr::ReconcileAutonomy()
+{
+    for (auto& [accountId, bot] : playerBots)
+    {
+        if (!bot || !bot->IsInWorld())
+            continue;
+
+        ObjectGuid::LowType lowGuid = bot->GetGUID().GetCounter();
+        if (!IsGuildMate(lowGuid))
+            continue;
+
+        bool underControl = IsUnderPlayerControl(bot);
+        bool wasControlled = playerControlledBots.count(lowGuid) > 0;
+
+        if (underControl && !wasControlled)
+        {
+            playerControlledBots.insert(lowGuid);
+            LOG_INFO("module.guildmate", "Guild Mate: {} is now under player control", bot->GetName());
+        }
+        else if (!underControl && wasControlled)
+        {
+            playerControlledBots.erase(lowGuid);
+            RestoreAutonomy(bot);
+        }
     }
 }
 
