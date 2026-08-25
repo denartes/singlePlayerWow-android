@@ -70,3 +70,29 @@ GuildMate.ExcludeRandomBotAccounts = 1
 #
 
 GuildMate.IncludeOfflineOnly = 1
+
+#
+# GuildMate.TeleportOnLogin
+#     Description: Teleport Guild Mate bots to a level-appropriate zone
+#                  when they first log in. This ensures the RPG strategy
+#                  has valid grind/camp locations nearby to function properly.
+#                  Without this, bots may get stuck if logged out in areas
+#                  without appropriate content for their level.
+#     Default:     1 - Enabled
+#
+
+GuildMate.TeleportOnLogin = 1
+
+#
+# GuildMate.PeriodicTeleport
+#     Description: Periodically teleport autonomous Guild Mate bots to new
+#                  level-appropriate zones (like RandomBots do). This helps
+#                  bots progress when they've exhausted content in their
+#                  current area. Uses the same intervals as RandomBots:
+#                  AiPlayerbot.MinRandomBotTeleportInterval and
+#                  AiPlayerbot.MaxRandomBotTeleportInterval.
+#                  Only applies to autonomous bots (not under player control).
+#     Default:     1 - Enabled
+#
+
+GuildMate.PeriodicTeleport = 1

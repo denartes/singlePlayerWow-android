@@ -15,8 +15,9 @@
 #include "Player.h"
 #include "PlayerbotMgr.h"
 
-#include <vector>
+#include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 class GuildMateMgr : public PlayerbotHolder
 {
@@ -82,6 +83,8 @@ private:
     std::string guildIds;
     bool excludeRandomBotAccounts;
     bool includeOfflineOnly;
+    bool teleportOnLogin;
+    bool periodicTeleport;
 
     // State
     bool initialized;
@@ -97,6 +100,9 @@ private:
 
     // Tracks bots currently under legitimate player control
     std::unordered_set<ObjectGuid::LowType> playerControlledBots;
+
+    // Tracks last teleport time for periodic teleportation
+    std::unordered_map<ObjectGuid::LowType, time_t> lastTeleportTime;
 };
 
 #define sGuildMateMgr GuildMateMgr::instance()
