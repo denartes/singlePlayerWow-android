@@ -295,11 +295,11 @@ public:
         // ========== RANDOMPLAYERBOTMGR EVENTS ==========
         // These events control how ProcessBot() handles maintenance
         uint32 botId = target->GetGUID().GetCounter();
-        uint32 deadEvent = sRandomPlayerbotMgr->GetEventValue(botId, "dead");
-        uint32 reviveEvent = sRandomPlayerbotMgr->GetEventValue(botId, "revive");
-        uint32 teleportEvent = sRandomPlayerbotMgr->GetEventValue(botId, "teleport");
-        uint32 randomizeEvent = sRandomPlayerbotMgr->GetEventValue(botId, "randomize");
-        uint32 updateEvent = sRandomPlayerbotMgr->GetEventValue(botId, "update");
+        uint32 deadEvent = sRandomPlayerbotMgr->GetValue(botId, "dead");
+        uint32 reviveEvent = sRandomPlayerbotMgr->GetValue(botId, "revive");
+        uint32 teleportEvent = sRandomPlayerbotMgr->GetValue(botId, "teleport");
+        uint32 randomizeEvent = sRandomPlayerbotMgr->GetValue(botId, "randomize");
+        uint32 updateEvent = sRandomPlayerbotMgr->GetValue(botId, "update");
 
         handler->PSendSysMessage("=== ProcessBot Events ===");
         handler->PSendSysMessage("  dead: {} | revive: {} | teleport: {} | randomize: {} | update: {}",

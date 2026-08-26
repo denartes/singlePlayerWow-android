@@ -326,8 +326,7 @@ void GuildMateMgr::OnBotLoginInternal(Player* const bot)
     // Set randomize event to prevent ProcessBot from re-randomizing this bot's gear
     // Guild Mate bots are player alts with real gear, not randomly generated bots
     uint32 botId = bot->GetGUID().GetCounter();
-    sRandomPlayerbotMgr->SetEventValue(botId, "randomize", 1,
-                                        sPlayerbotAIConfig->maxRandomBotRandomizeTime);
+    sRandomPlayerbotMgr->SetValue(botId, "randomize", 1);
 
     // Get the PlayerbotAI for this bot (created by PlayerbotHolder::OnBotLogin())
     PlayerbotAI* ai = GET_PLAYERBOT_AI(bot);
