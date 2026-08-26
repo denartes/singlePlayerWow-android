@@ -292,58 +292,10 @@ if is_worldserver_running; then
     sleep 0.5
 fi
 
-start_full_session() {
-    # Create fresh tmux session with both authserver and worldserver
-    cd "$SERVER_DIR"
-    tmux new-session -d -c "$SERVER_DIR" -s "$TMUX_SESSION" './bin/authserver'
-    sleep 1  # Give authserver a moment to start
-    tmux split-window -h -t "$TMUX_SESSION" -c "$SERVER_DIR" './bin/worldserver'
-    ok "Created new tmux session '$TMUX_SESSION' with authserver + worldserver"
-}
-
-start_worldserver_pane() {
-    # Add worldserver pane to existing session
-    tmux split-window -h -t "$TMUX_SESSION" -c "$SERVER_DIR" './bin/worldserver'
-    ok "Added worldserver pane to existing session"
-}
-
-# CASE 1: tmux session exists
+# Kill any existing tmux session to start fresh
 if tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
-    # Check if authserver is running
-    if is_authserver_running; then
-        # Authserver is running - just add worldserver pane
-        start_worldserver_pane
-    else
-        # Authserver is NOT running - kill stale session and recreate
-        ok "Authserver not running, recreating full session"
-        tmux kill-session -t "$TMUX_SESSION" 2>/dev/null || true
-        start_full_session
-    fi
-# CASE 2: No tmux session - create it
-else
-    ok "No existing tmux session, creating new one"
-    start_full_session
-fi
-
-# Wait a moment and verify both processes are running
-sleep 3
-
-# Check if servers survived startup
-STARTUP_OK=true
-
-if ! is_authserver_running; then
-    fail "Authserver failed to start (check MariaDB connection)"
-    STARTUP_OK=false
-fi
-
-if ! is_worldserver_running; then
-    fail "Worldserver failed to start (check MariaDB connection)"
-    STARTUP_OK=false
-fi
-
-if ! tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
-    fail "Tmux session '$TMUX_SESSION' disappeared"
-    STARTUP_OK=false
+    ok "Killing existing tmux session"
+    tmux kill-session -t "$TMUX_SESSION" 2>/dev/null || true
 fi
 
 echo ""
@@ -352,23 +304,10 @@ echo "  Guild Mate Dev Build — Complete"
 echo "  Total elapsed: $(elapsed)"
 echo "════════════════════════════════════════"
 echo ""
+echo "Launching AzerothCore servers in tmux..."
 
-if [ "$STARTUP_OK" = true ]; then
-    echo "  ✓ Authserver running"
-    echo "  ✓ Worldserver running"
-    echo "  ✓ Azeroth tmux session ready"
-    echo ""
-    echo "  tmux attach -t $TMUX_SESSION"
-else
-    echo ""
-    fail "Server startup failed. Check logs for details."
-    echo "  Possible causes:"
-    echo "    - MariaDB connection issues"
-    echo "    - Missing or corrupted database"
-    echo "    - Configuration errors in worldserver.conf"
-    echo ""
-    echo "  To debug, try running servers manually:"
-    echo "    cd $SERVER_DIR"
-    echo "    ./bin/authserver"
-    exit 1
-fi
+# Launch servers and attach (same pattern as wowsp_cutoff.sh)
+cd "$SERVER_DIR"
+tmux new-session -d -c "$SERVER_DIR" -s "$TMUX_SESSION" './bin/authserver' \; \
+     split-window -h -c "$SERVER_DIR" './bin/worldserver' \; \
+     attach
