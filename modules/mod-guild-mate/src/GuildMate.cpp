@@ -7,6 +7,7 @@
 
 #include "GuildMate.h"
 
+#include <algorithm>
 #include "CharacterCache.h"
 #include "Group.h"
 #include "Config.h"
@@ -410,6 +411,33 @@ void GuildMateMgr::RestoreAutonomy(Player* bot)
     LOG_INFO("module.guildmate", "Guild Mate: {} restored to autonomous state from current position", bot->GetName());
 }
 
+void GuildMateMgr::EnsureAutonomousStrategies(Player* bot)
+{
+    PlayerbotAI* ai = GET_PLAYERBOT_AI(bot);
+    if (!ai)
+        return;
+
+    // Check if bot has grind strategy - if not, add required autonomous strategies
+    std::vector<std::string> strategies = ai->GetStrategies(BOT_STATE_NON_COMBAT);
+    bool hasGrind = std::find(strategies.begin(), strategies.end(), "grind") != strategies.end();
+    
+    if (!hasGrind)
+    {
+        LOG_INFO("module.guildmate", "Guild Mate: {} missing grind strategy, adding autonomous strategies", bot->GetName());
+        
+        ai->ChangeStrategy("+grind", BOT_STATE_NON_COMBAT);
+        
+        if (sPlayerbotAIConfig->enableNewRpgStrategy)
+            ai->ChangeStrategy("+new rpg", BOT_STATE_NON_COMBAT);
+        else if (sPlayerbotAIConfig->autoDoQuests)
+            ai->ChangeStrategy("+rpg", BOT_STATE_NON_COMBAT);
+        else
+            ai->ChangeStrategy("+move random", BOT_STATE_NON_COMBAT);
+        
+        ai->ChangeStrategy("-follow", BOT_STATE_NON_COMBAT);
+    }
+}
+
 void GuildMateMgr::ReconcileAutonomy()
 {
     for (auto& [accountId, bot] : playerBots)
@@ -435,12 +463,16 @@ void GuildMateMgr::ReconcileAutonomy()
             RestoreAutonomy(bot);
         }
 
-        // Let RandomPlayerbotMgr handle maintenance for autonomous Guild Mate bots
-        // This gives them full random bot treatment: revive dead bots, teleport idle bots, refresh, etc.
-        // Controlled by GuildMate.PeriodicTeleport config option
-        if (periodicTeleport && !underControl && !bot->GetGroup())
+        // For autonomous bots, ensure they have the correct strategies
+        if (!underControl && !bot->GetGroup())
         {
-            sRandomPlayerbotMgr->ProcessBot(bot);
+            EnsureAutonomousStrategies(bot);
+            
+            // Let RandomPlayerbotMgr handle maintenance (revive, teleport, refresh)
+            if (periodicTeleport)
+            {
+                sRandomPlayerbotMgr->ProcessBot(bot);
+            }
         }
     }
 }

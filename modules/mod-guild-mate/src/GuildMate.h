@@ -74,6 +74,7 @@ private:
     bool IsUnderPlayerControl(Player* bot);
     void RestoreAutonomy(Player* bot);
     void ReconcileAutonomy();
+    void EnsureAutonomousStrategies(Player* bot);
 
     // Configuration
     bool enabled;
