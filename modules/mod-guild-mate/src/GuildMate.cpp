@@ -356,6 +356,13 @@ void GuildMateMgr::OnBotLoginInternal(Player* const bot)
 
         // Remove follow strategy since we're autonomous (no master)
         ai->ChangeStrategy("-follow", BOT_STATE_NON_COMBAT);
+
+        // Apply ranged strategy for hunters to enable automatic ammo management
+        if (bot->getClass() == CLASS_HUNTER)
+        {
+            ai->ChangeStrategy("+ranged", BOT_STATE_COMBAT);
+            LOG_DEBUG("module.guildmate", "Guild Mate: {} (Hunter) enabled with ranged combat strategy for ammo management", bot->GetName());
+        }
     }
 
     // Teleport to level-appropriate zone (like RandomBots do)
@@ -408,6 +415,13 @@ void GuildMateMgr::RestoreAutonomy(Player* bot)
 
     ai->ChangeStrategy("-follow", BOT_STATE_NON_COMBAT);
 
+    // Apply ranged strategy for hunters to enable automatic ammo management
+    if (bot->getClass() == CLASS_HUNTER)
+    {
+        ai->ChangeStrategy("+ranged", BOT_STATE_COMBAT);
+        LOG_DEBUG("module.guildmate", "Guild Mate: {} (Hunter) restored to autonomous state with ranged combat strategy", bot->GetName());
+    }
+
     LOG_INFO("module.guildmate", "Guild Mate: {} restored to autonomous state from current position", bot->GetName());
 }
 
@@ -435,6 +449,18 @@ void GuildMateMgr::EnsureAutonomousStrategies(Player* bot)
             ai->ChangeStrategy("+move random", BOT_STATE_NON_COMBAT);
         
         ai->ChangeStrategy("-follow", BOT_STATE_NON_COMBAT);
+    }
+
+    // Ensure ranged strategy for hunters to enable automatic ammo management
+    if (bot->getClass() == CLASS_HUNTER)
+    {
+        strategies = ai->GetStrategies(BOT_STATE_COMBAT);
+        bool hasRanged = std::find(strategies.begin(), strategies.end(), "ranged") != strategies.end();
+        if (!hasRanged)
+        {
+            ai->ChangeStrategy("+ranged", BOT_STATE_COMBAT);
+            LOG_DEBUG("module.guildmate", "Guild Mate: {} (Hunter) ensured with ranged combat strategy", bot->GetName());
+        }
     }
 }
 
