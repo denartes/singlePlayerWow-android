@@ -73,6 +73,7 @@ private:
     // Autonomy lifecycle
     bool IsUnderPlayerControl(Player* bot);
     bool ShouldRelocateForLevel(Player* bot);
+    bool TryRelocateGuildMateForLevel(Player* bot);
     void EnsureLevelAppropriateZone(Player* bot);
     void EnsureHunterAmmo(Player* bot);
     void RestoreAutonomy(Player* bot);

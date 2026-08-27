@@ -14,11 +14,15 @@
 #include "DatabaseEnv.h"
 #include "GameTime.h"
 #include "GuildMgr.h"
+#include "Map.h"
+#include "MapMgr.h"
 #include "ObjectAccessor.h"
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
 #include "PlayerbotFactory.h"
 #include "Playerbots.h"
+#include "Position.h"
+#include "Random.h"
 #include "RandomPlayerbotMgr.h"
 #include "ScriptMgr.h"
 #include "WorldScript.h"
@@ -423,6 +427,97 @@ bool GuildMateMgr::ShouldRelocateForLevel(Player* bot)
     return maxLevel && bot->GetLevel() > maxLevel;
 }
 
+bool GuildMateMgr::TryRelocateGuildMateForLevel(Player* bot)
+{
+    if (!bot || !bot->IsInWorld())
+        return false;
+
+    PlayerbotAI* ai = GET_PLAYERBOT_AI(bot);
+    if (!ai)
+        return false;
+
+    uint8 level = bot->GetLevel();
+    std::vector<WorldLocation>* locs = nullptr;
+    std::vector<WorldLocation>* fallbackLocs = nullptr;
+
+    if (sPlayerbotAIConfig->enableNewRpgStrategy)
+    {
+        locs = IsAlliance(bot->getRace())
+            ? &sRandomPlayerbotMgr->allianceStarterPerLevelCache[level]
+            : &sRandomPlayerbotMgr->hordeStarterPerLevelCache[level];
+        fallbackLocs = &sRandomPlayerbotMgr->locsPerLevelCache[level];
+    }
+    else
+    {
+        locs = &sRandomPlayerbotMgr->locsPerLevelCache[level];
+    }
+
+    if (level >= 10 && urand(0, 100) < sPlayerbotAIConfig->probTeleToBankers * 100)
+    {
+        std::vector<WorldLocation>* bankerLocs = &sRandomPlayerbotMgr->bankerLocsPerLevelCache[level];
+        if (!bankerLocs->empty())
+            locs = bankerLocs;
+    }
+
+    for (uint8 pass = 0; pass < 2; ++pass)
+    {
+        std::vector<WorldLocation>* candidates = pass == 0 ? locs : fallbackLocs;
+        if (!candidates || candidates->empty())
+            continue;
+
+        uint32 start = urand(0, candidates->size() - 1);
+        for (uint32 offset = 0; offset < candidates->size(); ++offset)
+        {
+            WorldLocation loc = (*candidates)[(start + offset) % candidates->size()];
+            Map* map = sMapMgr->FindMap(loc.GetMapId(), 0);
+            if (!map)
+                continue;
+
+            float x = loc.GetPositionX();
+            float y = loc.GetPositionY();
+            float z = loc.GetPositionZ();
+            float orientation = loc.GetOrientation();
+
+            AreaTableEntry const* zone = sAreaTableStore.LookupEntry(map->GetZoneId(bot->GetPhaseMask(), x, y, z));
+            if (!zone)
+                continue;
+
+            AreaTableEntry const* area = sAreaTableStore.LookupEntry(map->GetAreaId(bot->GetPhaseMask(), x, y, z));
+            if (!area)
+                continue;
+
+            if (zone->team == 4 && bot->GetTeamId() == TEAM_ALLIANCE)
+                continue;
+
+            if (zone->team == 2 && bot->GetTeamId() == TEAM_HORDE)
+                continue;
+
+            if (map->IsInWater(bot->GetPhaseMask(), x, y, z, bot->GetCollisionHeight()))
+                continue;
+
+            float ground = map->GetHeight(bot->GetPhaseMask(), x, y, z + 0.5f);
+            if (ground <= INVALID_HEIGHT)
+                continue;
+
+            z = ground + 0.05f;
+            WorldLocation checkedLoc(loc.GetMapId(), x, y, z, orientation);
+            if (!ai->CheckLocationDistanceByLevel(bot, checkedLoc, true))
+                continue;
+
+            bot->GetMotionMaster()->Clear();
+            ai->Reset(true);
+            bot->TeleportTo(loc.GetMapId(), x, y, z, orientation);
+            bot->SendMovementFlagUpdate();
+
+            LOG_INFO("module.guildmate", "Guild Mate: {} relocated for level {} to map:{} zone:{} area:{} x:{:.1f} y:{:.1f}",
+                bot->GetName(), level, loc.GetMapId(), zone->ID, area->ID, x, y);
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void GuildMateMgr::EnsureLevelAppropriateZone(Player* bot)
 {
     if (!ShouldRelocateForLevel(bot))
@@ -438,10 +533,14 @@ void GuildMateMgr::EnsureLevelAppropriateZone(Player* bot)
 
     uint32 zoneId = bot->GetZoneId();
     uint8 level = bot->GetLevel();
-    sRandomPlayerbotMgr->SetValue(bot, "teleport", 0);
-    sRandomPlayerbotMgr->ProcessBot(bot);
-    LOG_INFO("module.guildmate", "Guild Mate: {} marked teleport due for level {} after outleveling zone {}",
-        bot->GetName(), level, zoneId);
+    if (TryRelocateGuildMateForLevel(bot))
+    {
+        sRandomPlayerbotMgr->ScheduleTeleport(lowGuid);
+        return;
+    }
+
+    LOG_WARN("module.guildmate", "Guild Mate: {} needs level relocation from zone {} at level {}, but no valid destination was found",
+        bot->GetName(), zoneId, level);
 }
 
 void GuildMateMgr::EnsureHunterAmmo(Player* bot)
