@@ -86,7 +86,7 @@ void OllamaBotRandomChatter::HandleRandomChatter()
     {
         Player* player = itr.second;
         if (!player->IsInWorld()) continue;
-        if (!PlayerbotsMgr::instance().GetPlayerbotAI(player))
+        if (!PlayerbotsMgr::instance()->GetPlayerbotAI(player))
             realPlayers.push_back(player);
     }
 
@@ -95,7 +95,7 @@ void OllamaBotRandomChatter::HandleRandomChatter()
     for (auto const& itr : allPlayers)
     {
         Player* bot = itr.second;
-        PlayerbotAI* ai = PlayerbotsMgr::instance().GetPlayerbotAI(bot);
+        PlayerbotAI* ai = PlayerbotsMgr::instance()->GetPlayerbotAI(bot);
         if (!ai) continue;
         if (!bot->IsInWorld() || bot->IsBeingTeleported()) continue;
         if (processedBotsThisTick.count(bot->GetGUID().GetRawValue())) continue;
@@ -110,7 +110,7 @@ void OllamaBotRandomChatter::HandleRandomChatter()
                 Player* player = pair.second;
                 if (!player || !player->IsInWorld())
                     continue;
-                if (PlayerbotsMgr::instance().GetPlayerbotAI(player))
+                if (PlayerbotsMgr::instance()->GetPlayerbotAI(player))
                     continue;
                 if (player->GetGuild() && player->GetGuild()->GetId() == guild->GetId())
                 {
@@ -431,7 +431,7 @@ void OllamaBotRandomChatter::HandleRandomChatter()
                     Player* player = pair.second;
                     if (!player || !player->IsInWorld())
                         continue;
-                    if (PlayerbotsMgr::instance().GetPlayerbotAI(player))
+                    if (PlayerbotsMgr::instance()->GetPlayerbotAI(player))
                         continue;
                     if (player->GetGuild() && player->GetGuild()->GetId() == guild->GetId())
                     {
@@ -540,7 +540,7 @@ void OllamaBotRandomChatter::HandleRandomChatter()
 
             auto prompt = [bot, &environmentInfo]()
             {
-                PlayerbotAI* botAI = PlayerbotsMgr::instance().GetPlayerbotAI(bot);
+                PlayerbotAI* botAI = PlayerbotsMgr::instance()->GetPlayerbotAI(bot);
                 if (!botAI)
                     return std::string("Error, no bot AI");
 
@@ -627,7 +627,7 @@ void OllamaBotRandomChatter::HandleRandomChatter()
                         Player* player = pair.second;
                         if (!player || !player->IsInWorld())
                             continue;
-                        if (PlayerbotsMgr::instance().GetPlayerbotAI(player))
+                        if (PlayerbotsMgr::instance()->GetPlayerbotAI(player))
                             continue;
                         if (player->GetGuild() && player->GetGuild()->GetId() == guild->GetId())
                         {
@@ -659,7 +659,7 @@ void OllamaBotRandomChatter::HandleRandomChatter()
                         Player* player = pair.second;
                         if (!player || !player->IsInWorld())
                             continue;
-                        if (PlayerbotsMgr::instance().GetPlayerbotAI(player))
+                        if (PlayerbotsMgr::instance()->GetPlayerbotAI(player))
                             continue;
                         if (bot->GetDistance(player) <= g_SayDistance)
                         {
@@ -677,7 +677,7 @@ void OllamaBotRandomChatter::HandleRandomChatter()
                         Player* player = pair.second;
                         if (!player || !player->IsInWorld())
                             continue;
-                        if (PlayerbotsMgr::instance().GetPlayerbotAI(player))
+                        if (PlayerbotsMgr::instance()->GetPlayerbotAI(player))
                             continue;
                         // General channel is faction and zone specific
                         if (player->GetTeamId() == bot->GetTeamId() && 
@@ -723,7 +723,7 @@ void OllamaBotRandomChatter::HandleRandomChatter()
                     
                     botPtr = ObjectAccessor::FindPlayer(ObjectGuid(botGuid));
                     if (!botPtr) return;
-                    PlayerbotAI* botAI = PlayerbotsMgr::instance().GetPlayerbotAI(botPtr);
+                    PlayerbotAI* botAI = PlayerbotsMgr::instance()->GetPlayerbotAI(botPtr);
                     if (!botAI) return;
                     
                     // Simulate typing delay if enabled
@@ -738,7 +738,7 @@ void OllamaBotRandomChatter::HandleRandomChatter()
                         // Reacquire pointers after delay
                         botPtr = ObjectAccessor::FindPlayer(ObjectGuid(botGuid));
                         if (!botPtr) return;
-                        botAI = PlayerbotsMgr::instance().GetPlayerbotAI(botPtr);
+                        botAI = PlayerbotsMgr::instance()->GetPlayerbotAI(botPtr);
                         if (!botAI) return;
                     }
                     
@@ -761,7 +761,7 @@ void OllamaBotRandomChatter::HandleRandomChatter()
                             Player* player = pair.second;
                             if (!player || !player->IsInWorld())
                                 continue;
-                            if (PlayerbotsMgr::instance().GetPlayerbotAI(player))
+                            if (PlayerbotsMgr::instance()->GetPlayerbotAI(player))
                                 continue;
                             if (player->GetGuild() && player->GetGuild()->GetId() == guild->GetId())
                             {
@@ -809,7 +809,7 @@ void OllamaBotRandomChatter::HandleRandomChatter()
                                 if (!player || !player->IsInWorld())
                                     continue;
                                     
-                                if (PlayerbotsMgr::instance().GetPlayerbotAI(player))
+                                if (PlayerbotsMgr::instance()->GetPlayerbotAI(player))
                                     continue;
                                     
                                 if (botPtr->GetDistance(player) <= g_SayDistance)
@@ -832,7 +832,7 @@ void OllamaBotRandomChatter::HandleRandomChatter()
                                 Player* player = pair.second;
                                 if (!player || !player->IsInWorld())
                                     continue;
-                                if (PlayerbotsMgr::instance().GetPlayerbotAI(player))
+                                if (PlayerbotsMgr::instance()->GetPlayerbotAI(player))
                                     continue;
                                 // General channel is faction and zone specific
                                 if (player->GetTeamId() == botPtr->GetTeamId() && 
