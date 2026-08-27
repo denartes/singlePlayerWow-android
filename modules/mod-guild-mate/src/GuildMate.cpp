@@ -438,8 +438,9 @@ void GuildMateMgr::EnsureLevelAppropriateZone(Player* bot)
 
     uint32 zoneId = bot->GetZoneId();
     uint8 level = bot->GetLevel();
-    sRandomPlayerbotMgr->RandomTeleportForLevel(bot);
-    LOG_INFO("module.guildmate", "Guild Mate: {} requested level relocation for level {} after outleveling zone {}",
+    sRandomPlayerbotMgr->SetValue(bot, "teleport", 0);
+    sRandomPlayerbotMgr->ProcessBot(bot);
+    LOG_INFO("module.guildmate", "Guild Mate: {} marked teleport due for level {} after outleveling zone {}",
         bot->GetName(), level, zoneId);
 }
 
