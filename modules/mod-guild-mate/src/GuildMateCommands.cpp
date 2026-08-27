@@ -206,6 +206,20 @@ public:
         BotState currentState = ai->GetState();
         handler->PSendSysMessage("AI State: {}", GetBotStateName(currentState));
 
+        Unit* currentTarget = nullptr;
+        AiObjectContext* context = ai->GetAiObjectContext();
+        if (context)
+            currentTarget = context->GetValue<Unit*>("current target")->Get();
+
+        handler->PSendSysMessage("Current Target: {}", currentTarget ? currentTarget->GetName() : "(none)");
+        handler->PSendSysMessage("Last Action: {}", ai->HandleRemoteCommand("action"));
+
+        if (target->getClass() == CLASS_HUNTER)
+        {
+            Item* ammo = ai->FindAmmo();
+            handler->PSendSysMessage("Hunter Ammo: {}", ammo ? Acore::StringFormat("{} x{}", ammo->GetEntry(), ammo->GetCount()) : "(none found)");
+        }
+
         // ========== ACTIVE STRATEGIES ==========
         // Show strategies for all states
         for (int s = 0; s < BOT_STATE_MAX; ++s)
@@ -235,7 +249,6 @@ public:
         handler->PSendSysMessage("RPG State: {}", rpgStatusStr);
 
         // RPG Target (if applicable)
-        AiObjectContext* context = ai->GetAiObjectContext();
         if (context)
         {
             // Get "rpg target" value

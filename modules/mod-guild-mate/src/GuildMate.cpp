@@ -504,16 +504,16 @@ void GuildMateMgr::ReconcileAutonomy()
             RestoreAutonomy(bot);
         }
 
-        // For autonomous bots, ensure they have the correct strategies
-        if (!underControl && !bot->GetGroup())
+        // For autonomous bots, let RandomPlayerbotMgr finish any reset/teleport work first.
+        if (!underControl)
         {
-            EnsureAutonomousStrategies(bot);
-            
             // Let RandomPlayerbotMgr handle maintenance (revive, teleport, refresh)
-            if (periodicTeleport)
+            if (!bot->GetGroup() && periodicTeleport)
             {
                 sRandomPlayerbotMgr->ProcessBot(bot);
             }
+
+            EnsureAutonomousStrategies(bot);
         }
     }
 }
