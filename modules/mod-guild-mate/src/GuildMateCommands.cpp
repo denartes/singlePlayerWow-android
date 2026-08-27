@@ -202,7 +202,7 @@ public:
             target->GetPositionX(), target->GetPositionY(), target->GetPositionZ());
 
         std::string zoneBracketConfig = sConfigMgr->GetOption<std::string>(
-            "AiPlayerbot.ZoneBracket." + std::to_string(target->GetZoneId()), "");
+            "AiPlayerbot.ZoneBracket." + std::to_string(target->GetZoneId()), "", false);
         if (!zoneBracketConfig.empty())
         {
             uint32 bracketMin = 0;

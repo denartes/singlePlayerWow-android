@@ -402,7 +402,7 @@ bool GuildMateMgr::ShouldRelocateForLevel(Player* bot)
         return false;
 
     std::string zoneBracket = sConfigMgr->GetOption<std::string>(
-        "AiPlayerbot.ZoneBracket." + std::to_string(bot->GetZoneId()), "");
+        "AiPlayerbot.ZoneBracket." + std::to_string(bot->GetZoneId()), "", false);
     if (zoneBracket.empty())
         return false;
 
@@ -439,7 +439,7 @@ void GuildMateMgr::EnsureLevelAppropriateZone(Player* bot)
     uint32 zoneId = bot->GetZoneId();
     uint8 level = bot->GetLevel();
     sRandomPlayerbotMgr->RandomTeleportForLevel(bot);
-    LOG_INFO("module.guildmate", "Guild Mate: {} relocated for level {} after outleveling zone {}",
+    LOG_INFO("module.guildmate", "Guild Mate: {} requested level relocation for level {} after outleveling zone {}",
         bot->GetName(), level, zoneId);
 }
 
