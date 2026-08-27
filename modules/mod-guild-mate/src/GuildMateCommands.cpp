@@ -216,7 +216,9 @@ public:
 
         if (target->getClass() == CLASS_HUNTER)
         {
+            Item* rangedWeapon = target->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_RANGED);
             Item* ammo = ai->FindAmmo();
+            handler->PSendSysMessage("Hunter Ranged Weapon: {}", rangedWeapon ? Acore::StringFormat("{} subclass {}", rangedWeapon->GetEntry(), rangedWeapon->GetTemplate()->SubClass) : "(none equipped)");
             handler->PSendSysMessage("Hunter Ammo: {}", ammo ? Acore::StringFormat("{} x{}", ammo->GetEntry(), ammo->GetCount()) : "(none found)");
         }
 

@@ -402,6 +402,39 @@ void GuildMateMgr::EnsureHunterAmmo(Player* bot)
 
     PlayerbotFactory factory(bot, bot->GetLevel());
     factory.InitAmmo();
+
+    PlayerbotAI* ai = GET_PLAYERBOT_AI(bot);
+    if (ai && ai->FindAmmo())
+        return;
+
+    Item* rangedWeapon = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_RANGED);
+    if (!rangedWeapon)
+    {
+        LOG_WARN("module.guildmate", "Guild Mate: {} (Hunter) has no ranged weapon equipped, cannot initialize ammo", bot->GetName());
+        return;
+    }
+
+    uint32 ammoEntry = 0;
+    switch (rangedWeapon->GetTemplate()->SubClass)
+    {
+        case ITEM_SUBCLASS_WEAPON_GUN:
+            ammoEntry = 2516; // Light Shot
+            break;
+        case ITEM_SUBCLASS_WEAPON_BOW:
+        case ITEM_SUBCLASS_WEAPON_CROSSBOW:
+            ammoEntry = 2512; // Rough Arrow
+            break;
+        default:
+            LOG_WARN("module.guildmate", "Guild Mate: {} (Hunter) has unsupported ranged weapon subclass {} for ammo initialization",
+                bot->GetName(), rangedWeapon->GetTemplate()->SubClass);
+            return;
+    }
+
+    if (!bot->GetItemCount(ammoEntry))
+        bot->AddItem(ammoEntry, 6000);
+
+    bot->SetAmmo(ammoEntry);
+    LOG_INFO("module.guildmate", "Guild Mate: {} (Hunter) initialized fallback ammo {}", bot->GetName(), ammoEntry);
 }
 
 void GuildMateMgr::RestoreAutonomy(Player* bot)
