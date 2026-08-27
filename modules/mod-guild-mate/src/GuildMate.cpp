@@ -17,6 +17,7 @@
 #include "ObjectAccessor.h"
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
+#include "PlayerbotFactory.h"
 #include "Playerbots.h"
 #include "RandomPlayerbotMgr.h"
 #include "ScriptMgr.h"
@@ -333,6 +334,10 @@ void GuildMateMgr::OnBotLoginInternal(Player* const bot)
     PlayerbotAI* ai = GET_PLAYERBOT_AI(bot);
     if (ai)
     {
+        // Initialize ammo for hunters and other classes that need projectiles
+        // This ensures hunters have ammunition equipped when they log in
+        sPlayerbotFactory->InitAmmo(bot);
+
         // Add autonomous non-combat strategies since we're not RandomBots
         // (RandomBots get these in AiFactory::AddDefaultNonCombatStrategies via IsRandomBot check)
         ai->ChangeStrategy("+grind", BOT_STATE_NON_COMBAT);
