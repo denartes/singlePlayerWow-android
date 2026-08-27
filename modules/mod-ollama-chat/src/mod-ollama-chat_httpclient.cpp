@@ -1,6 +1,10 @@
 #include "mod-ollama-chat_httpclient.h"
 #include "mod-ollama-chat_config.h"
 
+// Reduce optimization for this file due to large httplib header
+// This helps prevent compilation memory exhaustion in resource-limited environments
+#pragma GCC optimize("O1")
+
 // Include cpp-httplib for HTTP functionality
 #include <httplib.h>
 
@@ -165,3 +169,6 @@ bool OllamaHttpClient::IsAvailable() const
 {
     return m_available;
 }
+
+// Restore normal optimization
+#pragma GCC reset_options
