@@ -17,6 +17,7 @@
 #include "ObjectAccessor.h"
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
+#include "PlayerbotFactory.h"
 #include "Playerbots.h"
 #include "RandomPlayerbotMgr.h"
 #include "ScriptMgr.h"
@@ -333,6 +334,8 @@ void GuildMateMgr::OnBotLoginInternal(Player* const bot)
     PlayerbotAI* ai = GET_PLAYERBOT_AI(bot);
     if (ai)
     {
+        EnsureHunterAmmo(bot);
+
         // Add autonomous non-combat strategies since we're not RandomBots
         // (RandomBots get these in AiFactory::AddDefaultNonCombatStrategies via IsRandomBot check)
         ai->ChangeStrategy("+grind", BOT_STATE_NON_COMBAT);
@@ -392,6 +395,15 @@ bool GuildMateMgr::IsUnderPlayerControl(Player* bot)
     return group->IsMember(master->GetGUID());
 }
 
+void GuildMateMgr::EnsureHunterAmmo(Player* bot)
+{
+    if (!bot || bot->getClass() != CLASS_HUNTER)
+        return;
+
+    PlayerbotFactory factory(bot, bot->GetLevel());
+    factory.InitAmmo();
+}
+
 void GuildMateMgr::RestoreAutonomy(Player* bot)
 {
     if (bot->IsInCombat())
@@ -418,6 +430,7 @@ void GuildMateMgr::RestoreAutonomy(Player* bot)
     // Apply ranged strategy for hunters to enable automatic ammo management
     if (bot->getClass() == CLASS_HUNTER)
     {
+        EnsureHunterAmmo(bot);
         ai->ChangeStrategy("+ranged", BOT_STATE_COMBAT);
         LOG_DEBUG("module.guildmate", "Guild Mate: {} (Hunter) restored to autonomous state with ranged combat strategy", bot->GetName());
     }
@@ -454,6 +467,8 @@ void GuildMateMgr::EnsureAutonomousStrategies(Player* bot)
     // Ensure ranged strategy for hunters to enable automatic ammo management
     if (bot->getClass() == CLASS_HUNTER)
     {
+        EnsureHunterAmmo(bot);
+
         strategies = ai->GetStrategies(BOT_STATE_COMBAT);
         bool hasRanged = std::find(strategies.begin(), strategies.end(), "ranged") != strategies.end();
         if (!hasRanged)

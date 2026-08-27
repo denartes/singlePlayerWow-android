@@ -72,6 +72,7 @@ private:
 
     // Autonomy lifecycle
     bool IsUnderPlayerControl(Player* bot);
+    void EnsureHunterAmmo(Player* bot);
     void RestoreAutonomy(Player* bot);
     void ReconcileAutonomy();
     void EnsureAutonomousStrategies(Player* bot);
