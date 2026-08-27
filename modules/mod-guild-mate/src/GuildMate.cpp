@@ -395,6 +395,54 @@ bool GuildMateMgr::IsUnderPlayerControl(Player* bot)
     return group->IsMember(master->GetGUID());
 }
 
+bool GuildMateMgr::ShouldRelocateForLevel(Player* bot)
+{
+    if (!bot || bot->GetGroup() || bot->IsInCombat() || bot->IsBeingTeleported() ||
+        bot->HasUnitState(UNIT_STATE_IN_FLIGHT) || bot->InBattleground())
+        return false;
+
+    std::string zoneBracket = sConfigMgr->GetOption<std::string>(
+        "AiPlayerbot.ZoneBracket." + std::to_string(bot->GetZoneId()), "");
+    if (zoneBracket.empty())
+        return false;
+
+    size_t commaPos = zoneBracket.find(',');
+    if (commaPos == std::string::npos)
+        return false;
+
+    uint32 maxLevel = 0;
+    try
+    {
+        maxLevel = std::stoul(zoneBracket.substr(commaPos + 1));
+    }
+    catch (...)
+    {
+        return false;
+    }
+
+    return maxLevel && bot->GetLevel() > maxLevel;
+}
+
+void GuildMateMgr::EnsureLevelAppropriateZone(Player* bot)
+{
+    if (!ShouldRelocateForLevel(bot))
+        return;
+
+    ObjectGuid::LowType lowGuid = bot->GetGUID().GetCounter();
+    time_t now = time(nullptr);
+    auto lastAttempt = lastLevelRelocationAttempt.find(lowGuid);
+    if (lastAttempt != lastLevelRelocationAttempt.end() && now - lastAttempt->second < 300)
+        return;
+
+    lastLevelRelocationAttempt[lowGuid] = now;
+
+    uint32 zoneId = bot->GetZoneId();
+    uint8 level = bot->GetLevel();
+    sRandomPlayerbotMgr->RandomTeleportForLevel(bot);
+    LOG_INFO("module.guildmate", "Guild Mate: {} relocated for level {} after outleveling zone {}",
+        bot->GetName(), level, zoneId);
+}
+
 void GuildMateMgr::EnsureHunterAmmo(Player* bot)
 {
     if (!bot || bot->getClass() != CLASS_HUNTER)
@@ -546,6 +594,7 @@ void GuildMateMgr::ReconcileAutonomy()
                 sRandomPlayerbotMgr->ProcessBot(bot);
             }
 
+            EnsureLevelAppropriateZone(bot);
             EnsureAutonomousStrategies(bot);
         }
     }
