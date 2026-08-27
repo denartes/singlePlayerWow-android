@@ -162,7 +162,7 @@ void OllamaBotRandomChatter::HandleRandomChatter()
                 Unit* unitInRange = nullptr;
                 Acore::AnyUnitInObjectRangeCheck creatureCheck(bot, g_SayDistance);
                 Acore::UnitSearcher<Acore::AnyUnitInObjectRangeCheck> creatureSearcher(bot, unitInRange, creatureCheck);
-                Cell::VisitObjects(bot, creatureSearcher, g_SayDistance);
+                Cell::VisitAllObjects(bot, creatureSearcher, g_SayDistance);
                 if (unitInRange && unitInRange->GetTypeId() == TYPEID_UNIT)
                     if (!g_EnvCommentCreature.empty()) {
                         uint32_t idx = g_EnvCommentCreature.size() == 1 ? 0 : urand(0, g_EnvCommentCreature.size() - 1);
@@ -176,7 +176,7 @@ void OllamaBotRandomChatter::HandleRandomChatter()
                 Acore::GameObjectInRangeCheck goCheck(bot->GetPositionX(), bot->GetPositionY(), bot->GetPositionZ(), g_SayDistance);
                 GameObject* goInRange = nullptr;
                 Acore::GameObjectSearcher<Acore::GameObjectInRangeCheck> goSearcher(bot, goInRange, goCheck);
-                Cell::VisitObjects(bot, goSearcher, g_SayDistance);
+                Cell::VisitAllObjects(bot, goSearcher, g_SayDistance);
                 if (goInRange)
                 {
                     if (!g_EnvCommentGameObject.empty()) {
@@ -326,7 +326,7 @@ void OllamaBotRandomChatter::HandleRandomChatter()
                 Unit* unit = nullptr;
                 Acore::AnyUnitInObjectRangeCheck check(bot, g_SayDistance);
                 Acore::UnitSearcher<Acore::AnyUnitInObjectRangeCheck> searcher(bot, unit, check);
-                Cell::VisitObjects(bot, searcher, g_SayDistance);
+                Cell::VisitAllObjects(bot, searcher, g_SayDistance);
 
                 if (unit && unit->GetTypeId() == TYPEID_UNIT)
                 {
@@ -347,7 +347,7 @@ void OllamaBotRandomChatter::HandleRandomChatter()
                 Unit* unit = nullptr;
                 Acore::AnyUnitInObjectRangeCheck check(bot, g_SayDistance);
                 Acore::UnitSearcher<Acore::AnyUnitInObjectRangeCheck> searcher(bot, unit, check);
-                Cell::VisitObjects(bot, searcher, g_SayDistance);
+                Cell::VisitAllObjects(bot, searcher, g_SayDistance);
 
                 if (unit && unit->GetTypeId() == TYPEID_UNIT)
                 {
