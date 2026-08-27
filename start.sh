@@ -1,5 +1,5 @@
 #!/bin/bash
-# Fast incremental Guild Mate development build for Android/Termux.
+# Fast incremental Guild Mate & Ollama Chat development build for Android/Termux.
 # Requires an initial full build via wowsp_cutoff.sh.
 # Usage: ./start.sh
 
@@ -12,6 +12,8 @@ BUILD_DIR="$SOURCE_DIR/build"
 SERVER_DIR="$HOME/azeroth-server"
 GUILDMATE_SRC="$REPO_DIR/modules/mod-guild-mate"
 GUILDMATE_DST="$SOURCE_DIR/modules/mod-guild-mate"
+OLLAMA_SRC="$REPO_DIR/modules/mod-ollama-chat"
+OLLAMA_DST="$SOURCE_DIR/modules/mod-ollama-chat"
 BUILD_LOG="$HOME/guildmate-build.log"
 TMUX_SESSION="azeroth"
 
@@ -56,7 +58,7 @@ ensure_mariadb_running() {
 }
 
 echo "════════════════════════════════════════"
-echo "  Guild Mate Dev Build"
+echo "  Guild Mate & Ollama Chat Dev Build"
 echo "════════════════════════════════════════"
 
 # ── 1. Validate prerequisites ──────────────────────────────────────────────────
@@ -67,6 +69,12 @@ if [ ! -d "$GUILDMATE_SRC" ]; then
     exit 1
 fi
 ok "Guild Mate source: $GUILDMATE_SRC"
+
+if [ ! -d "$OLLAMA_SRC" ]; then
+    fail "Ollama Chat source not found: $OLLAMA_SRC"
+    exit 1
+fi
+ok "Ollama Chat source: $OLLAMA_SRC"
 
 if [ ! -d "$SOURCE_DIR" ]; then
     fail "AzerothCore source not found: $SOURCE_DIR"
@@ -162,21 +170,26 @@ list_src_files() {
         | sed "s|$1/||" | sort
 }
 
-BEFORE_FILES=$(list_src_files "$GUILDMATE_DST")
+BEFORE_FILES=$(list_src_files "$GUILDMATE_DST"; list_src_files "$OLLAMA_DST")
 
-# ── 3. Sync Guild Mate source ──────────────────────────────────────────────────
-print_step "Syncing Guild Mate source → $GUILDMATE_DST"
+# ── 3. Sync Guild Mate & Ollama Chat source ────────────────────────────────────
+print_step "Syncing local modules → $SOURCE_DIR/modules"
 
 if command -v rsync >/dev/null 2>&1; then
     rsync -a --delete "$GUILDMATE_SRC/" "$GUILDMATE_DST/"
-    ok "rsync complete"
+    ok "Guild Mate synced"
+    rsync -a --delete "$OLLAMA_SRC/" "$OLLAMA_DST/"
+    ok "Ollama Chat synced"
 else
     rm -rf "$GUILDMATE_DST"
     cp -r "$GUILDMATE_SRC" "$GUILDMATE_DST"
-    ok "cp complete (rsync not available)"
+    ok "Guild Mate copied (rsync not available)"
+    rm -rf "$OLLAMA_DST"
+    cp -r "$OLLAMA_SRC" "$OLLAMA_DST"
+    ok "Ollama Chat copied (rsync not available)"
 fi
 
-AFTER_FILES=$(list_src_files "$GUILDMATE_DST")
+AFTER_FILES=$(list_src_files "$GUILDMATE_DST"; list_src_files "$OLLAMA_DST")
 
 # ── 4. Detect whether cmake reconfiguration is needed ─────────────────────────
 print_step "Checking for CMake reconfiguration need"
@@ -184,13 +197,16 @@ print_step "Checking for CMake reconfiguration need"
 NEEDS_CMAKE=false
 NEEDS_CMAKE_REASON=""
 
-# Trigger 1: CMakeLists.txt or include.sh changed (build rules or flags changed)
+# Trigger 1: CMakeLists.txt, .cmake, or include.sh changed (build rules or flags changed)
 for trigger_file in \
         "$GUILDMATE_DST/CMakeLists.txt" \
-        "$GUILDMATE_DST/include.sh"; do
+        "$GUILDMATE_DST/include.sh" \
+        "$OLLAMA_DST/mod-ollama-chat.cmake" \
+        "$OLLAMA_DST/include.sh"; do
     if [ -f "$trigger_file" ] && [ "$trigger_file" -nt "$BUILD_DIR/CMakeCache.txt" ]; then
         NEEDS_CMAKE=true
         NEEDS_CMAKE_REASON="$(basename "$trigger_file") is newer than CMakeCache.txt"
+        break
     fi
 done
 
@@ -275,6 +291,14 @@ if [ -f "$CONF_DIST_SRC" ]; then
     ok "Updated: $CONF_DIST_DST (live .conf untouched)"
 fi
 
+OLLAMA_CONF_DIST_SRC="$OLLAMA_SRC/conf/mod_ollama_chat.conf.dist"
+OLLAMA_CONF_DIST_DST="$SERVER_DIR/etc/modules/mod_ollama_chat.conf.dist"
+if [ -f "$OLLAMA_CONF_DIST_SRC" ]; then
+    mkdir -p "$SERVER_DIR/etc/modules"
+    cp "$OLLAMA_CONF_DIST_SRC" "$OLLAMA_CONF_DIST_DST"
+    ok "Updated: $OLLAMA_CONF_DIST_DST (live .conf untouched)"
+fi
+
 # ── 7. Ensure MariaDB is running ──────────────────────────────────────────────
 print_step "Ensuring MariaDB is running"
 
@@ -300,7 +324,8 @@ fi
 
 echo ""
 echo "════════════════════════════════════════"
-echo "  Guild Mate Dev Build — Complete"
+echo "  Guild Mate & Ollama Chat Dev Build"
+echo "  Complete"
 echo "  Total elapsed: $(elapsed)"
 echo "════════════════════════════════════════"
 echo ""
