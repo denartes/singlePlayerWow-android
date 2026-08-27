@@ -40,6 +40,13 @@ if(TARGET modules)
     
     # Include cpp-httplib library (header-only)
     target_include_directories(modules PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src)
+
+    # cpp-httplib is large enough to exhaust memory on Android/Termux when
+    # optimized with the rest of worldserver. Keep this translation unit small.
+    set_source_files_properties(
+        ${CMAKE_CURRENT_LIST_DIR}/src/mod-ollama-chat_httpclient.cpp
+        PROPERTIES COMPILE_OPTIONS "-O0;-g0"
+    )
     
     # Enable SSL/TLS support for HTTPS connections
     find_package(OpenSSL QUIET)
