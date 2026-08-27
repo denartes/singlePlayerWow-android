@@ -15,7 +15,7 @@ GUILDMATE_DST="$SOURCE_DIR/modules/mod-guild-mate"
 OLLAMA_SRC="$REPO_DIR/modules/mod-ollama-chat"
 OLLAMA_DST="$SOURCE_DIR/modules/mod-ollama-chat"
 BUILD_LOG="$HOME/guildmate-build.log"
-BUILD_JOBS="${BUILD_JOBS:-1}"
+BUILD_JOBS="${BUILD_JOBS:-2}"
 TMUX_SESSION="azeroth"
 
 # ── Timing ─────────────────────────────────────────────────────────────────────
@@ -238,7 +238,7 @@ fi
 # ── 5. Incremental worldserver build ──────────────────────────────────────────
 print_step "Building worldserver (incremental)"
 echo "  Log: $BUILD_LOG"
-echo "  Jobs: $BUILD_JOBS (override with BUILD_JOBS=N ./start.sh)"
+echo "  Jobs: $BUILD_JOBS (use BUILD_JOBS=1 ./start.sh on low memory)"
 
 COMPILE_START=$(date +%s)
 cd "$BUILD_DIR"
