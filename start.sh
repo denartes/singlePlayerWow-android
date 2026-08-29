@@ -15,7 +15,7 @@ GUILDMATE_DST="$SOURCE_DIR/modules/mod-guild-mate"
 OLLAMA_SRC="$REPO_DIR/modules/mod-ollama-chat"
 OLLAMA_DST="$SOURCE_DIR/modules/mod-ollama-chat"
 BUILD_LOG="$HOME/guildmate-build.log"
-BUILD_JOBS="${BUILD_JOBS:-2}"
+BUILD_JOBS="${BUILD_JOBS:-4}"
 BUILD_STAMP="$BUILD_DIR/.guildmate-ollama-modules.sha256"
 TMUX_SESSION="azeroth"
 
