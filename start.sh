@@ -14,6 +14,15 @@ GUILDMATE_SRC="$REPO_DIR/modules/mod-guild-mate"
 GUILDMATE_DST="$SOURCE_DIR/modules/mod-guild-mate"
 OLLAMA_SRC="$REPO_DIR/modules/mod-ollama-chat"
 OLLAMA_DST="$SOURCE_DIR/modules/mod-ollama-chat"
+TRANSMOG_SRC="$REPO_DIR/modules/mod-transmog-plus"
+TRANSMOG_DST="$SOURCE_DIR/modules/mod-transmog-plus"
+STANDARD_TRANSMOG_DST="$SOURCE_DIR/modules/mod-transmog"
+TRANSMOG_CONF_SRC="$REPO_DIR/configs/modules/mod_transmog_plus.conf"
+TRANSMOG_CONF_DST="$SERVER_DIR/etc/modules/mod_transmog_plus.conf"
+TRANSMOG_CHARACTERS_SQL="$TRANSMOG_SRC/data/sql/characters/mod_transmog_plus_characters.sql"
+TRANSMOG_WORLD_SQL="$TRANSMOG_SRC/data/sql/world/mod_transmog_plus_world.sql"
+TRANSMOG_ADDON_DST="$SERVER_DIR/addon/Transmog"
+TRANSMOG_DATA_STAMP="$SERVER_DIR/.mod-transmog-plus-data.sha256"
 BUILD_LOG="$HOME/guildmate-build.log"
 BUILD_JOBS="${BUILD_JOBS:-4}"
 BUILD_STAMP="$BUILD_DIR/.guildmate-ollama-modules.sha256"
@@ -30,8 +39,7 @@ fail()       { echo "  ✗ $1" >&2; }
 module_fingerprint() {
     (
         cd "$REPO_DIR"
-        find modules/mod-guild-mate modules/mod-ollama-chat -type f \
-            \( -name '*.cpp' -o -name '*.h' -o -name 'CMakeLists.txt' -o -name '*.cmake' -o -name 'include.sh' \) \
+        find modules/mod-guild-mate modules/mod-ollama-chat modules/mod-transmog-plus -type f \
             -print0 2>/dev/null \
             | sort -z \
             | xargs -0 sha256sum \
@@ -74,11 +82,45 @@ ensure_mariadb_running() {
     return 1
 }
 
-echo "════════════════════════════════════════"
-echo "  Guild Mate & Ollama Chat Dev Build"
-echo "════════════════════════════════════════"
+install_transmog_data() {
+    print_step "Installing mod-transmog-plus data"
 
-# ── 1. Validate prerequisites ──────────────────────────────────────────────────
+    if [ ! -f "$TRANSMOG_CHARACTERS_SQL" ] || [ ! -f "$TRANSMOG_WORLD_SQL" ]; then
+        fail "mod-transmog-plus SQL files are missing"
+        return 1
+    fi
+
+    local data_hash
+    data_hash=$(cd "$TRANSMOG_SRC" && find addon data/sql -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}')
+
+    if [ -f "$TRANSMOG_DATA_STAMP" ] && [ "$(cat "$TRANSMOG_DATA_STAMP")" = "$data_hash" ] && \
+       mariadb -N -u acore -pacore -e "SELECT (SELECT COUNT(*) FROM acore_characters.mod_transmog_plus) > 0 OR EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'acore_characters' AND table_name = 'mod_transmog_plus')" 2>/dev/null | grep -q 1 && \
+       mariadb -N -u acore -pacore -e "SELECT EXISTS (SELECT 1 FROM acore_world.creature_template WHERE entry = 190012)" 2>/dev/null | grep -q 1 && \
+       [ -f "$TRANSMOG_ADDON_DST/transmog.toc" ]; then
+        ok "Transmog data unchanged"
+        return 0
+    fi
+
+    if ! mariadb -u acore -pacore acore_characters < "$TRANSMOG_CHARACTERS_SQL"; then
+        fail "Failed to import mod-transmog-plus character SQL"
+        return 1
+    fi
+    ok "Character schema installed"
+
+    if ! mariadb -u acore -pacore acore_world < "$TRANSMOG_WORLD_SQL"; then
+        fail "Failed to import mod-transmog-plus world SQL"
+        return 1
+    fi
+    ok "World schema and NPC installed"
+
+    rm -rf "$TRANSMOG_ADDON_DST"
+    mkdir -p "$(dirname "$TRANSMOG_ADDON_DST")"
+    cp -r "$TRANSMOG_SRC/addon/Transmog" "$TRANSMOG_ADDON_DST"
+    echo "$data_hash" > "$TRANSMOG_DATA_STAMP"
+    ok "Addon package installed: $TRANSMOG_ADDON_DST"
+}
+
+echo "Guild Mate, Ollama Chat, and Transmog Plus Dev Build"
 print_step "Validating prerequisites"
 
 if [ ! -d "$GUILDMATE_SRC" ]; then
@@ -92,6 +134,12 @@ if [ ! -d "$OLLAMA_SRC" ]; then
     exit 1
 fi
 ok "Ollama Chat source: $OLLAMA_SRC"
+
+if [ ! -d "$TRANSMOG_SRC" ]; then
+    fail "Transmog Plus source not found: $TRANSMOG_SRC"
+    exit 1
+fi
+ok "Transmog Plus source: $TRANSMOG_SRC"
 
 if [ ! -d "$SOURCE_DIR" ]; then
     fail "AzerothCore source not found: $SOURCE_DIR"
@@ -172,7 +220,8 @@ if [ "$SKIP_BUILD" != true ]; then
     fi
 
     # ── 3. Snapshot source-file list before sync (for add/remove detection) ───
-    BEFORE_FILES=$(list_src_files "$GUILDMATE_DST"; list_src_files "$OLLAMA_DST")
+    BEFORE_FILES=$(list_src_files "$GUILDMATE_DST"; list_src_files "$OLLAMA_DST"; list_src_files "$TRANSMOG_DST")
+    STANDARD_TRANSMOG_REMOVED=false
 
     # ── 3. Sync Guild Mate & Ollama Chat source ───────────────────────────────
     print_step "Syncing local modules → $SOURCE_DIR/modules"
@@ -182,6 +231,8 @@ if [ "$SKIP_BUILD" != true ]; then
         ok "Guild Mate synced"
         rsync -a --delete "$OLLAMA_SRC/" "$OLLAMA_DST/"
         ok "Ollama Chat synced"
+        rsync -a --delete "$TRANSMOG_SRC/" "$TRANSMOG_DST/"
+        ok "Transmog Plus synced"
     else
         rm -rf "$GUILDMATE_DST"
         cp -r "$GUILDMATE_SRC" "$GUILDMATE_DST"
@@ -189,9 +240,18 @@ if [ "$SKIP_BUILD" != true ]; then
         rm -rf "$OLLAMA_DST"
         cp -r "$OLLAMA_SRC" "$OLLAMA_DST"
         ok "Ollama Chat copied (rsync not available)"
+        rm -rf "$TRANSMOG_DST"
+        cp -r "$TRANSMOG_SRC" "$TRANSMOG_DST"
+        ok "Transmog Plus copied (rsync not available)"
     fi
 
-    AFTER_FILES=$(list_src_files "$GUILDMATE_DST"; list_src_files "$OLLAMA_DST")
+    if [ -d "$STANDARD_TRANSMOG_DST" ]; then
+        rm -rf "$STANDARD_TRANSMOG_DST"
+        STANDARD_TRANSMOG_REMOVED=true
+        ok "Removed standard mod-transmog"
+    fi
+
+    AFTER_FILES=$(list_src_files "$GUILDMATE_DST"; list_src_files "$OLLAMA_DST"; list_src_files "$TRANSMOG_DST")
 
     # ── 4. Detect whether cmake reconfiguration is needed ─────────────────────
     print_step "Checking for CMake reconfiguration need"
@@ -203,7 +263,8 @@ if [ "$SKIP_BUILD" != true ]; then
             "$GUILDMATE_DST/CMakeLists.txt" \
             "$GUILDMATE_DST/include.sh" \
             "$OLLAMA_DST/mod-ollama-chat.cmake" \
-            "$OLLAMA_DST/include.sh"; do
+            "$OLLAMA_DST/include.sh" \
+            "$TRANSMOG_DST/CMakeLists.txt"; do
         if [ -f "$trigger_file" ] && [ "$trigger_file" -nt "$BUILD_DIR/CMakeCache.txt" ]; then
             NEEDS_CMAKE=true
             NEEDS_CMAKE_REASON="$(basename "$trigger_file") is newer than CMakeCache.txt"
@@ -214,6 +275,11 @@ if [ "$SKIP_BUILD" != true ]; then
     if [ "$BEFORE_FILES" != "$AFTER_FILES" ]; then
         NEEDS_CMAKE=true
         NEEDS_CMAKE_REASON="source file set changed (added/removed .cpp or .h)"
+    fi
+
+    if [ "$STANDARD_TRANSMOG_REMOVED" = true ]; then
+        NEEDS_CMAKE=true
+        NEEDS_CMAKE_REASON="standard mod-transmog was removed"
     fi
 
     if [ "$NEEDS_CMAKE" = true ]; then
@@ -296,6 +362,14 @@ if [ "$SKIP_BUILD" != true ]; then
         ok "Updated: $OLLAMA_CONF_DIST_DST (live .conf untouched)"
     fi
 
+    TRANSMOG_CONF_DIST_SRC="$TRANSMOG_SRC/conf/mod_transmog_plus.conf.dist"
+    TRANSMOG_CONF_DIST_DST="$SERVER_DIR/etc/modules/mod_transmog_plus.conf.dist"
+    if [ -f "$TRANSMOG_CONF_DIST_SRC" ]; then
+        mkdir -p "$SERVER_DIR/etc/modules"
+        cp "$TRANSMOG_CONF_DIST_SRC" "$TRANSMOG_CONF_DIST_DST"
+        ok "Updated: $TRANSMOG_CONF_DIST_DST (live .conf untouched)"
+    fi
+
     echo "$CURRENT_BUILD_HASH" > "$BUILD_STAMP"
 else
     print_step "Skipping build"
@@ -308,6 +382,17 @@ print_step "Ensuring MariaDB is running"
 if ! ensure_mariadb_running; then
     fail "Cannot start AzerothCore servers without MariaDB"
     exit 1
+fi
+
+if ! install_transmog_data; then
+    fail "mod-transmog-plus setup failed; servers will not start"
+    exit 1
+fi
+
+if [ -f "$TRANSMOG_CONF_SRC" ] && [ ! -f "$TRANSMOG_CONF_DST" ]; then
+    mkdir -p "$SERVER_DIR/etc/modules"
+    cp "$TRANSMOG_CONF_SRC" "$TRANSMOG_CONF_DST"
+    ok "Installed: $TRANSMOG_CONF_DST"
 fi
 
 # ── 8. Restart worldserver ────────────────────────────────────────────────────
