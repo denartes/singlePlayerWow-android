@@ -231,3 +231,62 @@ Ask AI for help how to modify this bitmask value to match your phone CPU
 Replace 192.168.X.XXX with your actual LAN/WAN IP (type ifconfig to find out)
 
 `mariadb -u root -e "UPDATE acore_auth.realmlist SET address = '192.168.X.XXX' WHERE id = 1;"`
+
+---
+
+## mod-transmog-plus
+
+The cutoff build installs `Stefan2102/mod-transmog-plus` at baseline commit
+`fd599bae2a3cc0718ee403d6d6fe0b4cb11d57c3`. The compatibility target remains
+Duall AzerothCore commit `abc884520173084d5cd37b72b57b3822230dcb32`; the core
+is not updated or patched by this integration.
+
+The baseline module's API usage matches the pinned core for the relevant
+surfaces: `PlayerScript` login/logout/delete/equip/unequip/visible-slot hooks,
+`OnPlayerCanUsePrivateChat` with `LANG_ADDON`, `WorldPacket` chat responses,
+`ObjectGuid`, item templates, and `CharacterDatabase` query/execute calls.
+The addon protocol is retained unchanged. No AzerothCore source changes are
+required.
+
+### Build and database setup
+
+Run the normal cutoff installer from Termux. It checks out the locked core,
+clones `mod-transmog-plus` at the pinned baseline, and builds with the existing
+Android Clang flags. For an existing installation, `start.sh` removes the old
+`mod-transmog` directory, syncs `modules/mod-transmog-plus`, installs the
+configuration, imports the module SQL, and stages the addon automatically.
+The old `transmog.conf` settings are not used.
+
+When nothing has changed, `start.sh` skips the transmog rebuild, SQL imports,
+and addon copy. It uses a data fingerprint plus lightweight schema checks to
+repair the setup only when files or required database objects are missing.
+
+```text
+modules/mod-transmog-plus/data/sql/characters/mod_transmog_plus_characters.sql -> acore_characters
+modules/mod-transmog-plus/data/sql/world/mod_transmog_plus_world.sql          -> acore_world
+```
+
+These files are imported by `start.sh`. The world SQL creates NPC `190012`
+(`.npc add 190012`), and the character SQL creates the module-owned slot and
+account-collection tables. Existing standard transmog data is not deleted or
+migrated automatically.
+
+`start.sh` stages the addon at `~/azeroth-server/addon/Transmog`. Copy that
+directory into the client's `Interface/AddOns/Transmog` location for the visual
+UI. Without the addon, the same NPC provides the gossip fallback.
+
+### Runtime checklist
+
+1. Start `worldserver` and confirm `mod-transmog-plus` loads.
+2. Use `.npc add 190012` and test gossip with the addon absent.
+3. Install the addon and verify open/status/list/apply/remove messages.
+4. Equip an eligible item, apply an appearance, replace the equipped item, and
+    verify the slot appearance remains.
+5. Verify hide/show, logout/login, worldserver restart, and another character
+    on the same account.
+6. Disable the addon and retest gossip; repeat with playerbots enabled.
+
+The repository-side checks cover installer wiring and pinned-source API/schema
+inspection. A full compile and runtime test must be performed in the Android
+Termux environment because this Windows workspace lacks the pinned build's
+Boost toolchain and server database.

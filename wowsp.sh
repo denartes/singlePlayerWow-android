@@ -456,7 +456,7 @@ MODULES=(
     "https://github.com/azerothcore/mod-reward-played-time"
     "https://github.com/azerothcore/mod-solo-lfg"
     "https://github.com/azerothcore/mod-top-arena"
-    "https://github.com/azerothcore/mod-transmog"
+    "https://github.com/Stefan2102/mod-transmog-plus"
     "https://github.com/azerothcore/mod-who-logged"
 )
 

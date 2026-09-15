@@ -6,9 +6,12 @@
  */
 
 #include "Chat.h"
+#include "Config.h"
 #include "DatabaseEnv.h"
 #include "GuildMate.h"
+#include "Map.h"
 #include "Player.h"
+#include "PlayerbotAIConfig.h"
 #include "ScriptMgr.h"
 
 // Playerbots includes for inspect command
@@ -190,6 +193,36 @@ public:
             target->GetLevel(),
             target->getClass());
 
+        const AreaTableEntry* zone = ai->GetCurrentZone();
+        const AreaTableEntry* area = ai->GetCurrentArea();
+        handler->PSendSysMessage("Location: map:{} zone:{} ({}) area:{} ({}) x:{:.1f} y:{:.1f} z:{:.1f}",
+            target->GetMapId(),
+            target->GetZoneId(), zone ? ai->GetLocalizedAreaName(zone) : "unknown",
+            target->GetAreaId(), area ? ai->GetLocalizedAreaName(area) : "unknown",
+            target->GetPositionX(), target->GetPositionY(), target->GetPositionZ());
+
+        std::string zoneBracketConfig = sConfigMgr->GetOption<std::string>(
+            "AiPlayerbot.ZoneBracket." + std::to_string(target->GetZoneId()), "", false);
+        if (!zoneBracketConfig.empty())
+        {
+            uint32 bracketMin = 0;
+            uint32 bracketMax = 0;
+            size_t commaPos = zoneBracketConfig.find(',');
+            if (commaPos != std::string::npos)
+            {
+                bracketMin = std::stoul(zoneBracketConfig.substr(0, commaPos));
+                bracketMax = std::stoul(zoneBracketConfig.substr(commaPos + 1));
+            }
+
+            handler->PSendSysMessage("Zone Bracket: {} | In Bracket: {}",
+                zoneBracketConfig,
+                target->GetLevel() >= bracketMin && target->GetLevel() <= bracketMax ? "yes" : "no");
+        }
+        else
+        {
+            handler->PSendSysMessage("Zone Bracket: (none configured for current zone)");
+        }
+
         // Mode: Autonomous vs Player-controlled
         bool hasRealMaster = ai->HasRealPlayerMaster();
         Player* master = ai->GetMaster();
@@ -205,6 +238,43 @@ public:
         // ========== AI STATE ==========
         BotState currentState = ai->GetState();
         handler->PSendSysMessage("AI State: {}", GetBotStateName(currentState));
+
+        handler->PSendSysMessage("Activity: AllowActivity={} | IsActive={} | AFK={}",
+            ai->AllowActivity(ALL_ACTIVITY) ? "yes" : "no",
+            ai->IsActive() ? "yes" : "no",
+            target->isAFK() ? "yes" : "no");
+        handler->PSendSysMessage("Movement: moving={} | combat={} | teleporting={} | flight={} | mounted={}",
+            target->isMoving() ? "yes" : "no",
+            target->IsInCombat() ? "yes" : "no",
+            target->IsBeingTeleported() ? "yes" : "no",
+            target->HasUnitState(UNIT_STATE_IN_FLIGHT) ? "yes" : "no",
+            target->IsMounted() ? "yes" : "no");
+
+        handler->PSendSysMessage("Config: BotActiveAlone={} | SmartScale={} | ForceGuild={} | AutoTeleportForLevel={}",
+            sPlayerbotAIConfig->botActiveAlone,
+            sPlayerbotAIConfig->botActiveAloneSmartScale ? "yes" : "no",
+            sPlayerbotAIConfig->BotActiveAloneForceWhenInGuild ? "yes" : "no",
+            sPlayerbotAIConfig->autoTeleportForLevel ? "yes" : "no");
+        handler->PSendSysMessage("Config: NewRpg={} | AutoDoQuests={} | GuildMatePeriodicTeleport={}",
+            sPlayerbotAIConfig->enableNewRpgStrategy ? "yes" : "no",
+            sPlayerbotAIConfig->autoDoQuests ? "yes" : "no",
+            sConfigMgr->GetOption<bool>("GuildMate.PeriodicTeleport", true) ? "yes" : "no");
+
+        Unit* currentTarget = nullptr;
+        AiObjectContext* context = ai->GetAiObjectContext();
+        if (context)
+            currentTarget = context->GetValue<Unit*>("current target")->Get();
+
+        handler->PSendSysMessage("Current Target: {}", currentTarget ? currentTarget->GetName() : "(none)");
+        handler->PSendSysMessage("Last Action: {}", ai->HandleRemoteCommand("action"));
+
+        if (target->getClass() == CLASS_HUNTER)
+        {
+            Item* rangedWeapon = target->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_RANGED);
+            Item* ammo = ai->FindAmmo();
+            handler->PSendSysMessage("Hunter Ranged Weapon: {}", rangedWeapon ? Acore::StringFormat("{} subclass {}", rangedWeapon->GetEntry(), rangedWeapon->GetTemplate()->SubClass) : "(none equipped)");
+            handler->PSendSysMessage("Hunter Ammo: {}", ammo ? Acore::StringFormat("{} x{}", ammo->GetEntry(), ammo->GetCount()) : "(none found)");
+        }
 
         // ========== ACTIVE STRATEGIES ==========
         // Show strategies for all states
@@ -235,7 +305,6 @@ public:
         handler->PSendSysMessage("RPG State: {}", rpgStatusStr);
 
         // RPG Target (if applicable)
-        AiObjectContext* context = ai->GetAiObjectContext();
         if (context)
         {
             // Get "rpg target" value
@@ -284,6 +353,8 @@ public:
                     handler->PSendSysMessage("Travel Target: (inactive)");
                 }
             }
+
+            handler->PSendSysMessage("Travel Debug: {}", ai->HandleRemoteCommand("travel"));
         }
 
         // ========== QUEST COUNTS ==========

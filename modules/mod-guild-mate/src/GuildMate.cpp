@@ -14,10 +14,15 @@
 #include "DatabaseEnv.h"
 #include "GameTime.h"
 #include "GuildMgr.h"
+#include "Map.h"
+#include "MapMgr.h"
 #include "ObjectAccessor.h"
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
+#include "PlayerbotFactory.h"
 #include "Playerbots.h"
+#include "Position.h"
+#include "Random.h"
 #include "RandomPlayerbotMgr.h"
 #include "ScriptMgr.h"
 #include "WorldScript.h"
@@ -333,6 +338,8 @@ void GuildMateMgr::OnBotLoginInternal(Player* const bot)
     PlayerbotAI* ai = GET_PLAYERBOT_AI(bot);
     if (ai)
     {
+        EnsureHunterAmmo(bot);
+
         // Add autonomous non-combat strategies since we're not RandomBots
         // (RandomBots get these in AiFactory::AddDefaultNonCombatStrategies via IsRandomBot check)
         ai->ChangeStrategy("+grind", BOT_STATE_NON_COMBAT);
@@ -356,6 +363,13 @@ void GuildMateMgr::OnBotLoginInternal(Player* const bot)
 
         // Remove follow strategy since we're autonomous (no master)
         ai->ChangeStrategy("-follow", BOT_STATE_NON_COMBAT);
+
+        // Apply ranged strategy for hunters to enable automatic ammo management
+        if (bot->getClass() == CLASS_HUNTER)
+        {
+            ai->ChangeStrategy("+ranged", BOT_STATE_COMBAT);
+            LOG_DEBUG("module.guildmate", "Guild Mate: {} (Hunter) enabled with ranged combat strategy for ammo management", bot->GetName());
+        }
     }
 
     // Teleport to level-appropriate zone (like RandomBots do)
@@ -385,6 +399,192 @@ bool GuildMateMgr::IsUnderPlayerControl(Player* bot)
     return group->IsMember(master->GetGUID());
 }
 
+bool GuildMateMgr::ShouldRelocateForLevel(Player* bot)
+{
+    if (!bot || bot->GetGroup() || bot->IsInCombat() || bot->IsBeingTeleported() ||
+        bot->HasUnitState(UNIT_STATE_IN_FLIGHT) || bot->InBattleground())
+        return false;
+
+    std::string zoneBracket = sConfigMgr->GetOption<std::string>(
+        "AiPlayerbot.ZoneBracket." + std::to_string(bot->GetZoneId()), "", false);
+    if (zoneBracket.empty())
+        return false;
+
+    size_t commaPos = zoneBracket.find(',');
+    if (commaPos == std::string::npos)
+        return false;
+
+    uint32 maxLevel = 0;
+    try
+    {
+        maxLevel = std::stoul(zoneBracket.substr(commaPos + 1));
+    }
+    catch (...)
+    {
+        return false;
+    }
+
+    return maxLevel && bot->GetLevel() > maxLevel;
+}
+
+bool GuildMateMgr::TryRelocateGuildMateForLevel(Player* bot)
+{
+    if (!bot || !bot->IsInWorld())
+        return false;
+
+    PlayerbotAI* ai = GET_PLAYERBOT_AI(bot);
+    if (!ai)
+        return false;
+
+    uint8 level = bot->GetLevel();
+    std::vector<WorldLocation>* locs = nullptr;
+    std::vector<WorldLocation>* fallbackLocs = nullptr;
+
+    if (sPlayerbotAIConfig->enableNewRpgStrategy)
+    {
+        locs = IsAlliance(bot->getRace())
+            ? &sRandomPlayerbotMgr->allianceStarterPerLevelCache[level]
+            : &sRandomPlayerbotMgr->hordeStarterPerLevelCache[level];
+        fallbackLocs = &sRandomPlayerbotMgr->locsPerLevelCache[level];
+    }
+    else
+    {
+        locs = &sRandomPlayerbotMgr->locsPerLevelCache[level];
+    }
+
+    if (level >= 10 && urand(0, 100) < sPlayerbotAIConfig->probTeleToBankers * 100)
+    {
+        std::vector<WorldLocation>* bankerLocs = &sRandomPlayerbotMgr->bankerLocsPerLevelCache[level];
+        if (!bankerLocs->empty())
+            locs = bankerLocs;
+    }
+
+    for (uint8 pass = 0; pass < 2; ++pass)
+    {
+        std::vector<WorldLocation>* candidates = pass == 0 ? locs : fallbackLocs;
+        if (!candidates || candidates->empty())
+            continue;
+
+        uint32 start = urand(0, candidates->size() - 1);
+        for (uint32 offset = 0; offset < candidates->size(); ++offset)
+        {
+            WorldLocation loc = (*candidates)[(start + offset) % candidates->size()];
+            Map* map = sMapMgr->FindMap(loc.GetMapId(), 0);
+            if (!map)
+                continue;
+
+            float x = loc.GetPositionX();
+            float y = loc.GetPositionY();
+            float z = loc.GetPositionZ();
+            float orientation = loc.GetOrientation();
+
+            AreaTableEntry const* zone = sAreaTableStore.LookupEntry(map->GetZoneId(bot->GetPhaseMask(), x, y, z));
+            if (!zone)
+                continue;
+
+            AreaTableEntry const* area = sAreaTableStore.LookupEntry(map->GetAreaId(bot->GetPhaseMask(), x, y, z));
+            if (!area)
+                continue;
+
+            if (zone->team == 4 && bot->GetTeamId() == TEAM_ALLIANCE)
+                continue;
+
+            if (zone->team == 2 && bot->GetTeamId() == TEAM_HORDE)
+                continue;
+
+            if (map->IsInWater(bot->GetPhaseMask(), x, y, z, bot->GetCollisionHeight()))
+                continue;
+
+            float ground = map->GetHeight(bot->GetPhaseMask(), x, y, z + 0.5f);
+            if (ground <= INVALID_HEIGHT)
+                continue;
+
+            z = ground + 0.05f;
+            WorldLocation checkedLoc(loc.GetMapId(), x, y, z, orientation);
+            if (!ai->CheckLocationDistanceByLevel(bot, checkedLoc, true))
+                continue;
+
+            bot->GetMotionMaster()->Clear();
+            ai->Reset(true);
+            bot->TeleportTo(loc.GetMapId(), x, y, z, orientation);
+            bot->SendMovementFlagUpdate();
+
+            LOG_INFO("module.guildmate", "Guild Mate: {} relocated for level {} to map:{} zone:{} area:{} x:{:.1f} y:{:.1f}",
+                bot->GetName(), level, loc.GetMapId(), zone->ID, area->ID, x, y);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void GuildMateMgr::EnsureLevelAppropriateZone(Player* bot)
+{
+    if (!ShouldRelocateForLevel(bot))
+        return;
+
+    ObjectGuid::LowType lowGuid = bot->GetGUID().GetCounter();
+    time_t now = time(nullptr);
+    auto lastAttempt = lastLevelRelocationAttempt.find(lowGuid);
+    if (lastAttempt != lastLevelRelocationAttempt.end() && now - lastAttempt->second < 300)
+        return;
+
+    lastLevelRelocationAttempt[lowGuid] = now;
+
+    uint32 zoneId = bot->GetZoneId();
+    uint8 level = bot->GetLevel();
+    if (TryRelocateGuildMateForLevel(bot))
+    {
+        sRandomPlayerbotMgr->ScheduleTeleport(lowGuid);
+        return;
+    }
+
+    LOG_WARN("module.guildmate", "Guild Mate: {} needs level relocation from zone {} at level {}, but no valid destination was found",
+        bot->GetName(), zoneId, level);
+}
+
+void GuildMateMgr::EnsureHunterAmmo(Player* bot)
+{
+    if (!bot || bot->getClass() != CLASS_HUNTER)
+        return;
+
+    PlayerbotFactory factory(bot, bot->GetLevel());
+    factory.InitAmmo();
+
+    PlayerbotAI* ai = GET_PLAYERBOT_AI(bot);
+    if (ai && ai->FindAmmo())
+        return;
+
+    Item* rangedWeapon = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_RANGED);
+    if (!rangedWeapon)
+    {
+        LOG_WARN("module.guildmate", "Guild Mate: {} (Hunter) has no ranged weapon equipped, cannot initialize ammo", bot->GetName());
+        return;
+    }
+
+    uint32 ammoEntry = 0;
+    switch (rangedWeapon->GetTemplate()->SubClass)
+    {
+        case ITEM_SUBCLASS_WEAPON_GUN:
+            ammoEntry = 2516; // Light Shot
+            break;
+        case ITEM_SUBCLASS_WEAPON_BOW:
+        case ITEM_SUBCLASS_WEAPON_CROSSBOW:
+            ammoEntry = 2512; // Rough Arrow
+            break;
+        default:
+            LOG_WARN("module.guildmate", "Guild Mate: {} (Hunter) has unsupported ranged weapon subclass {} for ammo initialization",
+                bot->GetName(), rangedWeapon->GetTemplate()->SubClass);
+            return;
+    }
+
+    if (!bot->GetItemCount(ammoEntry))
+        bot->AddItem(ammoEntry, 6000);
+
+    bot->SetAmmo(ammoEntry);
+    LOG_INFO("module.guildmate", "Guild Mate: {} (Hunter) initialized fallback ammo {}", bot->GetName(), ammoEntry);
+}
+
 void GuildMateMgr::RestoreAutonomy(Player* bot)
 {
     if (bot->IsInCombat())
@@ -407,6 +607,14 @@ void GuildMateMgr::RestoreAutonomy(Player* bot)
         ai->ChangeStrategy("+move random", BOT_STATE_NON_COMBAT);
 
     ai->ChangeStrategy("-follow", BOT_STATE_NON_COMBAT);
+
+    // Apply ranged strategy for hunters to enable automatic ammo management
+    if (bot->getClass() == CLASS_HUNTER)
+    {
+        EnsureHunterAmmo(bot);
+        ai->ChangeStrategy("+ranged", BOT_STATE_COMBAT);
+        LOG_DEBUG("module.guildmate", "Guild Mate: {} (Hunter) restored to autonomous state with ranged combat strategy", bot->GetName());
+    }
 
     LOG_INFO("module.guildmate", "Guild Mate: {} restored to autonomous state from current position", bot->GetName());
 }
@@ -436,6 +644,20 @@ void GuildMateMgr::EnsureAutonomousStrategies(Player* bot)
         
         ai->ChangeStrategy("-follow", BOT_STATE_NON_COMBAT);
     }
+
+    // Ensure ranged strategy for hunters to enable automatic ammo management
+    if (bot->getClass() == CLASS_HUNTER)
+    {
+        EnsureHunterAmmo(bot);
+
+        strategies = ai->GetStrategies(BOT_STATE_COMBAT);
+        bool hasRanged = std::find(strategies.begin(), strategies.end(), "ranged") != strategies.end();
+        if (!hasRanged)
+        {
+            ai->ChangeStrategy("+ranged", BOT_STATE_COMBAT);
+            LOG_DEBUG("module.guildmate", "Guild Mate: {} (Hunter) ensured with ranged combat strategy", bot->GetName());
+        }
+    }
 }
 
 void GuildMateMgr::ReconcileAutonomy()
@@ -463,16 +685,17 @@ void GuildMateMgr::ReconcileAutonomy()
             RestoreAutonomy(bot);
         }
 
-        // For autonomous bots, ensure they have the correct strategies
-        if (!underControl && !bot->GetGroup())
+        // For autonomous bots, let RandomPlayerbotMgr finish any reset/teleport work first.
+        if (!underControl)
         {
-            EnsureAutonomousStrategies(bot);
-            
             // Let RandomPlayerbotMgr handle maintenance (revive, teleport, refresh)
-            if (periodicTeleport)
+            if (!bot->GetGroup() && periodicTeleport)
             {
                 sRandomPlayerbotMgr->ProcessBot(bot);
             }
+
+            EnsureLevelAppropriateZone(bot);
+            EnsureAutonomousStrategies(bot);
         }
     }
 }

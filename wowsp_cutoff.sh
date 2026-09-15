@@ -491,7 +491,7 @@ MODULES=(
     "https://github.com/azerothcore/mod-reward-played-time.git fc8a07958213393dbffad035e853bdc18ab66a6e"
     "https://github.com/azerothcore/mod-solo-lfg.git 3821fe1d108ade8d2b7ad6611e41154e05864c65"
     "https://github.com/azerothcore/mod-top-arena.git 6f3a8eded4e5cd6abab730b633d5e3f0719c9a19"
-    "https://github.com/azerothcore/mod-transmog.git 949cdfb0b989628064d36d95b0948f8b19ec702f"
+    "https://github.com/Stefan2102/mod-transmog-plus.git fd599ba"
     "https://github.com/azerothcore/mod-who-logged.git 3f439d0aa56d3a4782dee1467f1bdcb16b35aa2f"
 )
 

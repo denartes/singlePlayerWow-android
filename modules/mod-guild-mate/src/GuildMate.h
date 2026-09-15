@@ -72,6 +72,10 @@ private:
 
     // Autonomy lifecycle
     bool IsUnderPlayerControl(Player* bot);
+    bool ShouldRelocateForLevel(Player* bot);
+    bool TryRelocateGuildMateForLevel(Player* bot);
+    void EnsureLevelAppropriateZone(Player* bot);
+    void EnsureHunterAmmo(Player* bot);
     void RestoreAutonomy(Player* bot);
     void ReconcileAutonomy();
     void EnsureAutonomousStrategies(Player* bot);
@@ -101,6 +105,7 @@ private:
 
     // Tracks bots currently under legitimate player control
     std::unordered_set<ObjectGuid::LowType> playerControlledBots;
+    std::unordered_map<ObjectGuid::LowType, time_t> lastLevelRelocationAttempt;
 };
 
 #define sGuildMateMgr GuildMateMgr::instance()
