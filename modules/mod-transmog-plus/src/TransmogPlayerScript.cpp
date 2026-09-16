@@ -10,7 +10,7 @@ public:
         PLAYERHOOK_ON_LOGOUT,
         PLAYERHOOK_ON_DELETE,
         PLAYERHOOK_ON_EQUIP,
-        PLAYERHOOK_ON_UNEQUIP_ITEM,
+        PLAYERHOOK_ON_AFTER_MOVE_ITEM_FROM_INVENTORY,
         PLAYERHOOK_ON_LEARN_SPELL,
         PLAYERHOOK_ON_AFTER_SET_VISIBLE_ITEM_SLOT
     }) { }
@@ -71,7 +71,7 @@ public:
     }
 
 // Clear the visible override while the equipment slot is empty.
-    void OnPlayerUnequip(Player* player, Item*) override
+    void OnPlayerAfterMoveItemFromInventory(Player* player, Item*, uint8, uint8, bool) override
     {
         if (!sTransmog->Enable)
             return;
