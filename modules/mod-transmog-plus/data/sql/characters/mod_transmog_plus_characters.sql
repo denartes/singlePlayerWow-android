@@ -10,3 +10,8 @@ CREATE TABLE IF NOT EXISTS `mod_transmog_plus_appearances` (
     `item_template_id` mediumint(8) unsigned NOT NULL DEFAULT '0',
     PRIMARY KEY (`account_id`, `item_template_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `mod_transmog_plus_quest_migrations` (
+    `character_guid` int(10) unsigned NOT NULL,
+    PRIMARY KEY (`character_guid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -268,8 +268,15 @@ modules/mod-transmog-plus/data/sql/world/mod_transmog_plus_world.sql          ->
 
 These files are imported by `start.sh`. The world SQL creates NPC `190012`
 (`.npc add 190012`), and the character SQL creates the module-owned slot and
-account-collection tables. Existing standard transmog data is not deleted or
-migrated automatically.
+account-collection tables. If the standard module's
+`custom_unlocked_appearances` table exists, `start.sh` copies its account-wide
+collection into `mod_transmog_plus_appearances` with `INSERT IGNORE`; legacy
+data is not deleted.
+
+Completing a quest unlocks every eligible armor or weapon appearance from both
+its choice rewards and guaranteed rewards. On each character's first login
+after this feature is installed, already completed quests are scanned once so
+their reward appearances are also added to the account collection.
 
 `start.sh` stages the addon at `~/azeroth-server/addon/Transmog`. Copy that
 directory into the client's `Interface/AddOns/Transmog` location for the visual

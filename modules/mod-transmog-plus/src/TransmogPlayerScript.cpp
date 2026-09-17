@@ -1,5 +1,41 @@
 #include "Transmog.h"
 #include "Chat.h"
+#include "QuestDef.h"
+
+namespace
+{
+void CollectAppearance(Player* player, uint32 itemId, bool notify)
+{
+    ItemTemplate const* itemTemplate = sObjectMgr->GetItemTemplate(itemId);
+    if (!itemTemplate || (itemTemplate->Class != ITEM_CLASS_ARMOR && itemTemplate->Class != ITEM_CLASS_WEAPON) ||
+        TransmogRules_CanNeverTransmog(itemTemplate))
+        return;
+
+    uint32 accountId = player->GetSession()->GetAccountId();
+    sTransmog->LoadCollectionForAccount(accountId);
+
+    if (!sTransmog->AddCollectedAppearance(accountId, itemId))
+        return;
+
+    CharacterDatabase.Execute("INSERT IGNORE INTO mod_transmog_plus_appearances (account_id, item_template_id) VALUES ({}, {})", accountId, itemId);
+    if (notify)
+        ChatHandler(player->GetSession()).PSendSysMessage("{} {}", Transmog::GetItemLink(itemId, player->GetSession()), Tstr(player->GetSession(), LANG_TRANSMOG_APPEARANCE_ADDED));
+}
+
+void CollectQuestAppearances(Player* player, Quest const* quest, bool notify)
+{
+    if (!quest)
+        return;
+
+    for (uint8 i = 0; i < QUEST_REWARD_CHOICES_COUNT; ++i)
+        if (quest->RewardChoiceItemId[i])
+            CollectAppearance(player, quest->RewardChoiceItemId[i], notify);
+
+    for (uint8 i = 0; i < QUEST_REWARDS_COUNT; ++i)
+        if (quest->RewardItemId[i])
+            CollectAppearance(player, quest->RewardItemId[i], notify);
+}
+}
 
 // Player hooks maintain account collections and slot state across lifecycle events.
 class TransmogPlayerScript : public PlayerScript
@@ -10,7 +46,8 @@ public:
         PLAYERHOOK_ON_LOGOUT,
         PLAYERHOOK_ON_DELETE,
         PLAYERHOOK_ON_EQUIP,
-        PLAYERHOOK_ON_UNEQUIP_ITEM,
+        PLAYERHOOK_ON_AFTER_MOVE_ITEM_FROM_INVENTORY,
+        PLAYERHOOK_ON_PLAYER_COMPLETE_QUEST,
         PLAYERHOOK_ON_LEARN_SPELL,
         PLAYERHOOK_ON_AFTER_SET_VISIBLE_ITEM_SLOT
     }) { }
@@ -25,6 +62,15 @@ public:
             std::unique_lock<std::shared_mutex> lock(sTransmog->collectionMutex);
             // Keep the account cache alive until the last character using it logs out.
             ++sTransmog->collectionRefCounts[accountId];
+        }
+
+        QueryResult migration = CharacterDatabase.Query("SELECT 1 FROM mod_transmog_plus_quest_migrations WHERE character_guid = {}", player->GetGUID().GetCounter());
+        if (!migration)
+        {
+            for (uint32 questId : player->getRewardedQuests())
+                CollectQuestAppearances(player, sObjectMgr->GetQuestTemplate(questId), false);
+
+            CharacterDatabase.Execute("INSERT IGNORE INTO mod_transmog_plus_quest_migrations (character_guid) VALUES ({})", player->GetGUID().GetCounter());
         }
 
         sTransmog->LoadPlayerSlots(player->GetGUID());
@@ -43,6 +89,7 @@ public:
     void OnPlayerDelete(ObjectGuid guid, uint32) override
     {
         CharacterDatabase.Execute("DELETE FROM mod_transmog_plus WHERE Owner = {}", guid.GetCounter());
+        CharacterDatabase.Execute("DELETE FROM mod_transmog_plus_quest_migrations WHERE character_guid = {}", guid.GetCounter());
     }
 
 // Re-evaluate the stored appearance against the newly equipped item.
@@ -51,27 +98,16 @@ public:
         if (!item)
             return;
 
-        ItemTemplate const* itemTemplate = item->GetTemplate();
-        if (itemTemplate->Class != ITEM_CLASS_ARMOR && itemTemplate->Class != ITEM_CLASS_WEAPON)
-            return;
+        CollectAppearance(player, item->GetTemplate()->ItemId, true);
+    }
 
-        if (TransmogRules_CanNeverTransmog(itemTemplate))
-            return;
-
-        uint32 accountId = player->GetSession()->GetAccountId();
-        uint32 itemId = itemTemplate->ItemId;
-
-        sTransmog->LoadCollectionForAccount(accountId);
-
-        if (sTransmog->AddCollectedAppearance(accountId, itemId))
-        {
-            CharacterDatabase.Execute("INSERT INTO mod_transmog_plus_appearances (account_id, item_template_id) VALUES ({}, {})", accountId, itemId);
-            ChatHandler(player->GetSession()).PSendSysMessage("{} {}", Transmog::GetItemLink(itemId, player->GetSession()), Tstr(player->GetSession(), LANG_TRANSMOG_APPEARANCE_ADDED));
-        }
+    void OnPlayerCompleteQuest(Player* player, Quest const* quest) override
+    {
+        CollectQuestAppearances(player, quest, true);
     }
 
 // Clear the visible override while the equipment slot is empty.
-    void OnPlayerUnequip(Player* player, Item*) override
+    void OnPlayerAfterMoveItemFromInventory(Player* player, Item*, uint8, uint8, bool) override
     {
         if (!sTransmog->Enable)
             return;

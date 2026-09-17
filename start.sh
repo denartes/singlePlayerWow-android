@@ -107,6 +107,14 @@ install_transmog_data() {
     fi
     ok "Character schema installed"
 
+    if mariadb -N -u acore -pacore -e "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'acore_characters' AND table_name = 'custom_unlocked_appearances')" 2>/dev/null | grep -q 1; then
+        if ! mariadb -u acore -pacore acore_characters -e "INSERT IGNORE INTO mod_transmog_plus_appearances (account_id, item_template_id) SELECT account_id, item_template_id FROM custom_unlocked_appearances"; then
+            fail "Failed to migrate standard transmog appearances"
+            return 1
+        fi
+        ok "Standard transmog appearances migrated"
+    fi
+
     if ! mariadb -u acore -pacore acore_world < "$TRANSMOG_WORLD_SQL"; then
         fail "Failed to import mod-transmog-plus world SQL"
         return 1
