@@ -19,6 +19,12 @@ TRANSMOG_DST="$SOURCE_DIR/modules/mod-transmog-plus"
 STANDARD_TRANSMOG_DST="$SOURCE_DIR/modules/mod-transmog"
 TRANSMOG_CONF_SRC="$REPO_DIR/configs/modules/mod_transmog_plus.conf"
 TRANSMOG_CONF_DST="$SERVER_DIR/etc/modules/mod_transmog_plus.conf"
+AOE_LOOT_CONF_SRC="$REPO_DIR/configs/modules/mod_aoe_loot.conf"
+AOE_LOOT_CONF_DST="$SERVER_DIR/etc/modules/mod_aoe_loot.conf"
+AHBOT_CONF_SRC="$REPO_DIR/configs/modules/mod_ahbot.conf"
+AHBOT_CONF_DST="$SERVER_DIR/etc/modules/mod_ahbot.conf"
+AHBOT_CONF_DIST_SRC="$REPO_DIR/configs/modules/mod_ahbot.conf.dist"
+AHBOT_CONF_DIST_DST="$SERVER_DIR/etc/modules/mod_ahbot.conf.dist"
 TRANSMOG_CHARACTERS_SQL="$TRANSMOG_SRC/data/sql/characters/mod_transmog_plus_characters.sql"
 TRANSMOG_WORLD_SQL="$TRANSMOG_SRC/data/sql/world/mod_transmog_plus_world.sql"
 TRANSMOG_ADDON_DST="$SERVER_DIR/addon/Transmog"
@@ -401,6 +407,24 @@ if [ -f "$TRANSMOG_CONF_SRC" ] && [ ! -f "$TRANSMOG_CONF_DST" ]; then
     mkdir -p "$SERVER_DIR/etc/modules"
     cp "$TRANSMOG_CONF_SRC" "$TRANSMOG_CONF_DST"
     ok "Installed: $TRANSMOG_CONF_DST"
+fi
+
+if [ -f "$AOE_LOOT_CONF_SRC" ] && [ ! -f "$AOE_LOOT_CONF_DST" ]; then
+    mkdir -p "$SERVER_DIR/etc/modules"
+    cp "$AOE_LOOT_CONF_SRC" "$AOE_LOOT_CONF_DST"
+    ok "Installed: $AOE_LOOT_CONF_DST"
+fi
+
+if [ -f "$AHBOT_CONF_SRC" ] && [ ! -f "$AHBOT_CONF_DST" ]; then
+    mkdir -p "$SERVER_DIR/etc/modules"
+    cp "$AHBOT_CONF_SRC" "$AHBOT_CONF_DST"
+    ok "Installed: $AHBOT_CONF_DST"
+fi
+
+if [ -f "$AHBOT_CONF_DIST_SRC" ]; then
+    mkdir -p "$SERVER_DIR/etc/modules"
+    cp "$AHBOT_CONF_DIST_SRC" "$AHBOT_CONF_DIST_DST"
+    ok "Updated: $AHBOT_CONF_DIST_DST (live .conf untouched)"
 fi
 
 # ── 8. Restart worldserver ────────────────────────────────────────────────────
