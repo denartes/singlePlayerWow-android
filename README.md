@@ -2,6 +2,28 @@
 
 *Cutoff date applied, so azerothcore updates should not break this:
 
+## Development Workflow
+
+The repository is the source of truth. CI artifacts must always be reproducible from the commit that produced them.
+
+1. Create a feature branch from `main`.
+2. Make one narrowly scoped change.
+3. Push the branch and open a pull request.
+4. GitHub Actions builds the relevant artifacts.
+5. Download the artifacts from the workflow run.
+6. Test the Android APK or runtime artifact on the Samsung Galaxy S25.
+7. Merge to `main` after validation.
+
+Example branches:
+
+- `feature/runtime-build`
+- `feature/server-launch`
+- `feature/log-streaming`
+
+The Samsung Galaxy S25 is currently the integration-test device. Android-only changes produce `bygdok-eternal-debug`; server-runtime changes produce `bygdok-runtime-arm64`; changes affecting both paths use the integration workflow and produce both artifacts.
+
+The server-runtime workflow reuses the pinned AzerothCore commit, locked module list, Boost patch, Android API 30, ARM64, and CMake flags from `wowsp_cutoff.sh`. Hosted Ubuntu runners do not provide the Android-targeted MariaDB/readline/ncurses libraries used by the proven S25 build, so the workflow requires the runner environment to provide `ANDROID_MYSQL_ROOT` and `ANDROID_RUNTIME_LIB_DIR` through repository or organization configuration. It does not substitute host libraries or introduce Termux, Docker, containers, or emulation.
+
 ## One click install scripts 
 ### ⚡ Fast install, no compilation (~10 min):
 *copy into termux*

@@ -25,6 +25,21 @@ AHBOT_CONF_SRC="$REPO_DIR/configs/modules/mod_ahbot.conf"
 AHBOT_CONF_DST="$SERVER_DIR/etc/modules/mod_ahbot.conf"
 AHBOT_CONF_DIST_SRC="$REPO_DIR/configs/modules/mod_ahbot.conf.dist"
 AHBOT_CONF_DIST_DST="$SERVER_DIR/etc/modules/mod_ahbot.conf.dist"
+REMOVED_MODULE_CONFIGS=(
+    AutoBalance.conf AutoBalance.conf.dist
+    AutoRevive.conf AutoRevive.conf.dist
+    RacialTraitSwap.conf RacialTraitSwap.conf.dist
+    mod_learnspells.conf mod_learnspells.conf.dist
+    mod_npc_beastmaster.conf mod_npc_beastmaster.conf.dist npc_beastmaster.conf
+    quick_teleport.conf quick_teleport.conf.dist
+    random_enchants.conf random_enchants.conf.dist
+    reward_system.conf.dist
+)
+REMOVED_MODULE_DIRS=(
+    mod-random-enchants mod-auto-revive mod-autobalance mod-learnspells
+    mod-npc-beastmaster mod-quick-teleport mod-racial-trait-swap
+    mod-reward-played-time
+)
 TRANSMOG_CHARACTERS_SQL="$TRANSMOG_SRC/data/sql/characters/mod_transmog_plus_characters.sql"
 TRANSMOG_WORLD_SQL="$TRANSMOG_SRC/data/sql/world/mod_transmog_plus_world.sql"
 TRANSMOG_ADDON_DST="$SERVER_DIR/addon/Transmog"
@@ -183,10 +198,19 @@ if [ ! -d "$SERVER_DIR" ]; then
 fi
 ok "Server dir: $SERVER_DIR"
 
+REMOVED_MODULES_FOUND=false
+for removed_module in "${REMOVED_MODULE_DIRS[@]}"; do
+    if [ -d "$SOURCE_DIR/modules/$removed_module" ]; then
+        rm -rf "$SOURCE_DIR/modules/$removed_module"
+        REMOVED_MODULES_FOUND=true
+        ok "Removed stale source module: $removed_module"
+    fi
+done
+
 CURRENT_BUILD_HASH=$(module_fingerprint)
 PREVIOUS_BUILD_HASH=$(cat "$BUILD_STAMP" 2>/dev/null || true)
 SKIP_BUILD=false
-if [ -n "$CURRENT_BUILD_HASH" ] && [ "$CURRENT_BUILD_HASH" = "$PREVIOUS_BUILD_HASH" ] && [ -x "$SERVER_DIR/bin/worldserver" ]; then
+if [ "$REMOVED_MODULES_FOUND" = false ] && [ -n "$CURRENT_BUILD_HASH" ] && [ "$CURRENT_BUILD_HASH" = "$PREVIOUS_BUILD_HASH" ] && [ -x "$SERVER_DIR/bin/worldserver" ]; then
     SKIP_BUILD=true
     ok "No Guild Mate/Ollama build input changes detected"
 fi
@@ -294,6 +318,11 @@ if [ "$SKIP_BUILD" != true ]; then
     if [ "$STANDARD_TRANSMOG_REMOVED" = true ]; then
         NEEDS_CMAKE=true
         NEEDS_CMAKE_REASON="standard mod-transmog was removed"
+    fi
+
+    if [ "$REMOVED_MODULES_FOUND" = true ]; then
+        NEEDS_CMAKE=true
+        NEEDS_CMAKE_REASON="removed stale module source"
     fi
 
     if [ "$NEEDS_CMAKE" = true ]; then
@@ -426,6 +455,11 @@ if [ -f "$AHBOT_CONF_DIST_SRC" ]; then
     cp "$AHBOT_CONF_DIST_SRC" "$AHBOT_CONF_DIST_DST"
     ok "Updated: $AHBOT_CONF_DIST_DST (live .conf untouched)"
 fi
+
+for removed_config in "${REMOVED_MODULE_CONFIGS[@]}"; do
+    rm -f "$SERVER_DIR/etc/modules/$removed_config"
+done
+ok "Removed stale configs for uninstalled modules"
 
 # ── 8. Restart worldserver ────────────────────────────────────────────────────
 print_step "Starting AzerothCore servers"

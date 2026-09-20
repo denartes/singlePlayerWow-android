@@ -1,0 +1,64 @@
+name: Server Runtime
+
+on:
+  pull_request:
+    paths:
+      - "modules/**"
+      - "configs/**"
+      - "*.sh"
+      - "runtime/**"
+      - ".github/workflows/server-runtime.yml"
+      - "scripts/build-server-runtime.sh"
+  push:
+    branches:
+      - main
+    paths:
+      - "modules/**"
+      - "configs/**"
+      - "*.sh"
+      - "runtime/**"
+      - ".github/workflows/server-runtime.yml"
+      - "scripts/build-server-runtime.sh"
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_API: '30'
+      ANDROID_ABI: arm64-v8a
+      ANDROID_NDK_VERSION: 29.0.14206865
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK
+        run: sdkmanager "ndk;${ANDROID_NDK_VERSION}"
+
+      - name: Export Android NDK path
+        run: echo "ANDROID_NDK_ROOT=${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Install server build tools
+        run: sudo apt-get update && sudo apt-get install --yes cmake ninja-build git make perl
+
+      - name: Build and package server runtime
+        env:
+          ANDROID_MYSQL_ROOT: ${{ vars.BYGDOK_ANDROID_MYSQL_ROOT }}
+          ANDROID_RUNTIME_LIB_DIR: ${{ vars.BYGDOK_ANDROID_RUNTIME_LIB_DIR }}
+        run: bash scripts/build-server-runtime.sh
+
+      - name: Upload server runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: bygdok-runtime-arm64
+          path: runtime/build/bygdok-runtime-arm64

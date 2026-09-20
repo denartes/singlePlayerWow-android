@@ -541,6 +541,22 @@ if git clone --filter=blob:none --sparse https://github.com/duall/singlePlayerWo
         if [ -d "configs/modules" ]; then
             cp configs/modules/* "$SERVER_DIR/etc/modules/" 2>/dev/null || true
         fi
+        rm -f "$SERVER_DIR/etc/modules/AutoBalance.conf" \
+            "$SERVER_DIR/etc/modules/AutoBalance.conf.dist" \
+            "$SERVER_DIR/etc/modules/AutoRevive.conf" \
+            "$SERVER_DIR/etc/modules/AutoRevive.conf.dist" \
+            "$SERVER_DIR/etc/modules/RacialTraitSwap.conf" \
+            "$SERVER_DIR/etc/modules/RacialTraitSwap.conf.dist" \
+            "$SERVER_DIR/etc/modules/mod_learnspells.conf" \
+            "$SERVER_DIR/etc/modules/mod_learnspells.conf.dist" \
+            "$SERVER_DIR/etc/modules/mod_npc_beastmaster.conf" \
+            "$SERVER_DIR/etc/modules/mod_npc_beastmaster.conf.dist" \
+            "$SERVER_DIR/etc/modules/npc_beastmaster.conf" \
+            "$SERVER_DIR/etc/modules/quick_teleport.conf" \
+            "$SERVER_DIR/etc/modules/quick_teleport.conf.dist" \
+            "$SERVER_DIR/etc/modules/random_enchants.conf" \
+            "$SERVER_DIR/etc/modules/random_enchants.conf.dist" \
+            "$SERVER_DIR/etc/modules/reward_system.conf.dist"
         print_status "Configuration files installed"
     else
         print_warning "Configuration directory not found in repository"

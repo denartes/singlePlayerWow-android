@@ -412,6 +412,9 @@ cd "$SOURCE_DIR/modules"
 
 # Remove existing modules to ensure clean state
 rm -rf mod-* 2>/dev/null || true
+rm -rf mod-random-enchants mod-auto-revive mod-autobalance mod-learnspells \
+    mod-npc-beastmaster mod-quick-teleport mod-racial-trait-swap \
+    mod-reward-played-time 2>/dev/null || true
 
 echo "Cloning required modules (this may take a few minutes)..."
 
