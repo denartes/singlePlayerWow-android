@@ -163,9 +163,13 @@ build_boost() {
 }
 
 build_mariadb() {
-    local source
+    local source maria_cmake
     echo "[deps] MariaDB Connector/C 3.3.8"
     source="$(extract "$(download https://archive.mariadb.org/connector-c-3.3.8/mariadb-connector-c-3.3.8-src.tar.gz mariadb-connector-c-3.3.8-src.tar.gz)" mariadb-connector-c-3.3.8-src)"
+    maria_cmake="$source/CMakeLists.txt"
+    grep -q 'SET(WARNING_AS_ERROR "-Werror")' "$maria_cmake"
+    sed -i 's/IF ((NOT WIN32) AND (CMAKE_C_COMPILER_ID MATCHES "Clang" OR CMAKE_C_COMPILER_ID MATCHES "GNU"))/IF ((NOT WIN32) AND (NOT ANDROID) AND (CMAKE_C_COMPILER_ID MATCHES "Clang" OR CMAKE_C_COMPILER_ID MATCHES "GNU"))/' "$maria_cmake"
+    ! grep -q 'IF ((NOT WIN32) AND (CMAKE_C_COMPILER_ID MATCHES "Clang" OR CMAKE_C_COMPILER_ID MATCHES "GNU"))' "$maria_cmake"
     if [ ! -f "$PREFIX/mysql/lib/mariadb/libmariadb.so" ] && [ ! -f "$PREFIX/mysql/lib/libmariadb.so" ]; then
         cmake_build "$source" "$SOURCE_DIR/mariadb-build" \
             -DCMAKE_INSTALL_PREFIX="$PREFIX/mysql" \
