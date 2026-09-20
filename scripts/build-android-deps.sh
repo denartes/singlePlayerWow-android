@@ -11,6 +11,8 @@ SOURCE_DIR="${ANDROID_DEPS_SOURCE_DIR:-${RUNNER_TEMP:-/tmp}/bygdok-android-deps-
 TOOLCHAIN="$NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64"
 HOST_TAG="linux-x86_64"
 
+echo "Building Android ARM64 dependencies: API=$API ABI=$ABI NDK=$NDK_ROOT"
+
 mkdir -p "$PREFIX" "$SOURCE_DIR" "$PREFIX/lib" "$PREFIX/include" "$PREFIX/mysql/bin" "$PREFIX/mysql/include"
 rm -f "$PREFIX/.build-complete"
 
@@ -61,6 +63,7 @@ cmake_build() {
 
 build_zlib() {
     local archive source
+    echo "[deps] zlib 1.3.1"
     archive="$(download https://zlib.net/fossils/zlib-1.3.1.tar.gz zlib-1.3.1.tar.gz)"
     source="$(extract "$archive" zlib-1.3.1)"
     if [ ! -f "$PREFIX/lib/libz.so" ]; then
@@ -70,11 +73,12 @@ build_zlib() {
 
 build_openssl() {
     local archive source
+    echo "[deps] OpenSSL 3.0.15"
     archive="$(download https://www.openssl.org/source/old/3.0/openssl-3.0.15.tar.gz openssl-3.0.15.tar.gz)"
     source="$(extract "$archive" openssl-3.0.15)"
     if [ ! -f "$PREFIX/lib/libssl.so" ]; then
         pushd "$source" >/dev/null
-        ./Configure android-arm64 -D__ANDROID_API__="$API" --prefix="$PREFIX" --openssldir="$PREFIX/ssl" shared no-tests
+        ./Configure android-arm64 --prefix="$PREFIX" --openssldir="$PREFIX/ssl" shared no-tests
         make -j"$JOBS"
         make install_sw
         popd >/dev/null
@@ -83,6 +87,7 @@ build_openssl() {
 
 build_xz() {
     local archive source
+    echo "[deps] xz 5.6.3"
     archive="$(download https://github.com/tukaani-project/xz/releases/download/v5.6.3/xz-5.6.3.tar.xz xz-5.6.3.tar.xz)"
     source="$(extract "$archive" xz-5.6.3)"
     if [ ! -f "$PREFIX/lib/liblzma.so" ]; then
@@ -96,6 +101,7 @@ build_xz() {
 
 build_ncurses() {
     local archive source
+    echo "[deps] ncurses 6.5"
     archive="$(download https://invisible-mirror.net/archives/ncurses/ncurses-6.5.tar.gz ncurses-6.5.tar.gz)"
     source="$(extract "$archive" ncurses-6.5)"
     if [ ! -f "$PREFIX/lib/libncursesw.so" ]; then
@@ -110,6 +116,7 @@ build_ncurses() {
 
 build_readline() {
     local archive source
+    echo "[deps] readline 8.2"
     archive="$(download https://ftp.gnu.org/gnu/readline/readline-8.2.tar.gz readline-8.2.tar.gz)"
     source="$(extract "$archive" readline-8.2)"
     if [ ! -f "$PREFIX/lib/libreadline.so" ]; then
@@ -125,6 +132,7 @@ build_readline() {
 
 build_bzip2() {
     local archive source
+    echo "[deps] bzip2 1.0.8"
     archive="$(download https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz bzip2-1.0.8.tar.gz)"
     source="$(extract "$archive" bzip2-1.0.8)"
     if [ ! -f "$PREFIX/lib/libbz2.so" ]; then
@@ -139,6 +147,7 @@ build_bzip2() {
 
 build_boost() {
     local archive source
+    echo "[deps] Boost 1.85.0"
     archive="$(download https://archives.boost.io/release/1.85.0/source/boost_1_85_0.tar.gz boost_1_85_0.tar.gz)"
     source="$(extract "$archive" boost_1_85_0)"
     if [ ! -f "$PREFIX/lib/libboost_filesystem.a" ]; then
@@ -147,6 +156,7 @@ build_boost() {
         ./b2 -j"$JOBS" --prefix="$PREFIX" \
             toolset=clang target-os=android architecture=arm address-model=64 \
             cxxflags="--target=$TARGET$API -fPIC -I$PREFIX/include" \
+            linkflags="--target=$TARGET$API -fuse-ld=lld -L$PREFIX/lib" \
             link=static runtime-link=shared threading=multi install
         popd >/dev/null
     fi
@@ -154,6 +164,7 @@ build_boost() {
 
 build_mariadb() {
     local source
+    echo "[deps] MariaDB Connector/C 3.3.8"
     source="$(extract "$(download https://archive.mariadb.org/connector-c-3.3.8/mariadb-connector-c-3.3.8-src.tar.gz mariadb-connector-c-3.3.8-src.tar.gz)" mariadb-connector-c-3.3.8-src)"
     if [ ! -f "$PREFIX/mysql/lib/mariadb/libmariadb.so" ] && [ ! -f "$PREFIX/mysql/lib/libmariadb.so" ]; then
         cmake_build "$source" "$SOURCE_DIR/mariadb-build" \
