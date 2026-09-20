@@ -163,27 +163,24 @@ build_boost() {
 }
 
 build_mariadb() {
-    local source maria_cmake auth_source
+    local source maria_cmake remaining
     echo "[deps] MariaDB Connector/C 3.3.8"
     source="$(extract "$(download https://archive.mariadb.org/connector-c-3.3.8/mariadb-connector-c-3.3.8-src.tar.gz mariadb-connector-c-3.3.8-src.tar.gz)" mariadb-connector-c-3.3.8-src)"
-    auth_source="$source/plugins/auth/my_auth.c"
-    test -f "$auth_source" || { echo "MariaDB auth source not found: $auth_source" >&2; exit 1; }
-    echo "[deps] MariaDB auth source before ushort patch:"
-    if ! grep -nF 'int2store(end, (ushort) mysql->charset->nr);' "$auth_source" && \
-       ! grep -nF 'int2store(end, (unsigned short) mysql->charset->nr);' "$auth_source"; then
-        echo "Expected MariaDB auth source line not found in $auth_source" >&2
+    echo "[deps] MariaDB source occurrences before ushort patch:"
+    while IFS= read -r -d '' source_file; do
+        if grep -qF '(ushort)' "$source_file"; then
+            grep -nF '(ushort)' "$source_file"
+            sed -i 's/(ushort)/(unsigned short)/g' "$source_file"
+        fi
+    done < <(find "$source" -type f \( -name '*.c' -o -name '*.h' \) -print0)
+
+    remaining="$(grep -RInF --include='*.c' --include='*.h' '(ushort)' "$source" || true)"
+    if [ -n "$remaining" ]; then
+        echo "MariaDB ushort patch verification failed; remaining occurrences:" >&2
+        printf '%s\n' "$remaining" >&2
         exit 1
     fi
-    sed -i 's/int2store(end, (ushort) mysql->charset->nr);/int2store(end, (unsigned short) mysql->charset->nr);/' "$auth_source"
-    echo "[deps] MariaDB auth source after ushort patch:"
-    grep -nF 'int2store(end, (unsigned short) mysql->charset->nr);' "$auth_source" || {
-        echo "MariaDB ushort patch verification failed: $auth_source" >&2
-        exit 1
-    }
-    if grep -nF 'int2store(end, (ushort) mysql->charset->nr);' "$auth_source"; then
-        echo "MariaDB ushort patch left the original line in $auth_source" >&2
-        exit 1
-    fi
+    echo "[deps] MariaDB source ushort patch verified: zero remaining occurrences"
     maria_cmake="$source/CMakeLists.txt"
     grep -q 'SET(WARNING_AS_ERROR "-Werror")' "$maria_cmake"
     sed -i 's/IF ((NOT WIN32) AND (CMAKE_C_COMPILER_ID MATCHES "Clang" OR CMAKE_C_COMPILER_ID MATCHES "GNU"))/IF ((NOT WIN32) AND (NOT ANDROID) AND (CMAKE_C_COMPILER_ID MATCHES "Clang" OR CMAKE_C_COMPILER_ID MATCHES "GNU"))/' "$maria_cmake"
