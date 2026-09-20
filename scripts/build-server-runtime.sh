@@ -11,8 +11,10 @@ CORE_REPOSITORY="https://github.com/duall/azerothcore-android.git"
 ANDROID_API="${ANDROID_API:-30}"
 
 : "${ANDROID_NDK_ROOT:?ANDROID_NDK_ROOT must point to Android NDK r29}"
-: "${ANDROID_MYSQL_ROOT:?ANDROID_MYSQL_ROOT must point to an Android ARM64 MariaDB/MySQL client toolchain}"
-: "${ANDROID_RUNTIME_LIB_DIR:?ANDROID_RUNTIME_LIB_DIR must contain Android ARM64 runtime libraries}"
+ANDROID_MYSQL_ROOT="${ANDROID_MYSQL_ROOT:-${BYGDOK_ANDROID_MYSQL_ROOT:-}}"
+ANDROID_RUNTIME_LIB_DIR="${ANDROID_RUNTIME_LIB_DIR:-${BYGDOK_ANDROID_RUNTIME_LIB_DIR:-}}"
+: "${ANDROID_MYSQL_ROOT:?BYGDOK_ANDROID_MYSQL_ROOT must point to an Android ARM64 MariaDB/MySQL client toolchain}"
+: "${ANDROID_RUNTIME_LIB_DIR:?BYGDOK_ANDROID_RUNTIME_LIB_DIR must contain Android ARM64 runtime libraries}"
 
 TOOLCHAIN_DIR="${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64"
 ANDROID_CLANG="${TOOLCHAIN_DIR}/bin/aarch64-linux-android${ANDROID_API}-clang"
@@ -21,6 +23,16 @@ ANDROID_READELF="${TOOLCHAIN_DIR}/bin/llvm-readelf"
 
 for required in "$ANDROID_CLANG" "$ANDROID_CLANGXX" "$ANDROID_READELF" "$ANDROID_MYSQL_ROOT/bin/mysql_config"; do
     test -x "$required" || { echo "Missing required Android build tool: $required" >&2; exit 1; }
+done
+for required in \
+    "$ANDROID_MYSQL_ROOT/../include" \
+    "$ANDROID_MYSQL_ROOT/../lib/libmariadb.so" \
+    "$ANDROID_MYSQL_ROOT/../lib/libssl.so" \
+    "$ANDROID_MYSQL_ROOT/../lib/libcrypto.so" \
+    "$ANDROID_MYSQL_ROOT/../lib/libreadline.so" \
+    "$ANDROID_MYSQL_ROOT/../lib/libncurses.so" \
+    "$ANDROID_RUNTIME_LIB_DIR"; do
+    test -e "$required" || { echo "Missing staged Android dependency: $required" >&2; exit 1; }
 done
 
 rm -rf "$CORE_DIR" "$BUILD_DIR" "$INSTALL_DIR" "$OUTPUT_DIR"
@@ -53,6 +65,7 @@ done
 
 export PATH="$ANDROID_MYSQL_ROOT/bin:$PATH"
 export MYSQL_HOME="$ANDROID_MYSQL_ROOT"
+export CMAKE_PREFIX_PATH="$ANDROID_MYSQL_ROOT/..:$ANDROID_MYSQL_ROOT:$ANDROID_RUNTIME_LIB_DIR"
 mkdir -p "$BUILD_DIR" "$INSTALL_DIR"
 cmake -S "$CORE_DIR" -B "$BUILD_DIR" -G Ninja \
     -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake" \
@@ -61,6 +74,14 @@ cmake -S "$CORE_DIR" -B "$BUILD_DIR" -G Ninja \
     -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
     -DCMAKE_C_COMPILER="$ANDROID_CLANG" \
     -DCMAKE_CXX_COMPILER="$ANDROID_CLANGXX" \
+    -DANDROID_STL=c++_shared \
+    -DMYSQL_CONFIG="$ANDROID_MYSQL_ROOT/bin/mysql_config" \
+    -DMYSQL_INCLUDE_DIR="$ANDROID_MYSQL_ROOT/../include" \
+    -DMYSQL_LIBRARY="$ANDROID_MYSQL_ROOT/../lib/libmariadb.so" \
+    -DOPENSSL_ROOT_DIR="$ANDROID_MYSQL_ROOT/.." \
+    -DREADLINE_INCLUDE_DIR="$ANDROID_MYSQL_ROOT/../include" \
+    -DREADLINE_LIBRARY="$ANDROID_MYSQL_ROOT/../lib/libreadline.so" \
+    -DCMAKE_LIBRARY_PATH="$ANDROID_MYSQL_ROOT/../lib" \
     -DWITH_WARNINGS=1 -DTOOLS_BUILD=none -DSCRIPTS=static \
     -DCMAKE_CXX_FLAGS="-D__ANDROID__ -DANDROID -Wno-deprecated-literal-operator" \
     -DCMAKE_EXE_LINKER_FLAGS="-Wl,--allow-multiple-definition -lunwind"
@@ -72,13 +93,23 @@ cp "$INSTALL_DIR/bin/authserver" "$OUTPUT_DIR/bin/"
 cp "$INSTALL_DIR/bin/worldserver" "$OUTPUT_DIR/bin/"
 
 for binary in "$OUTPUT_DIR/bin/authserver" "$OUTPUT_DIR/bin/worldserver"; do
+    "$ANDROID_READELF" -h "$binary" | grep -q 'AArch64' || { echo "Not an ARM64 ELF binary: $binary" >&2; exit 1; }
     while read -r library; do
         case "$library" in
             libc.so|libdl.so|liblog.so|libm.so|libandroid.so|libc++abi.so) continue ;;
         esac
-        found="$(find "$ANDROID_RUNTIME_LIB_DIR" "$TOOLCHAIN_DIR/sysroot/usr/lib/aarch64-linux-android" -name "$library" -type f -print -quit)"
+        found="$(find "$ANDROID_RUNTIME_LIB_DIR" "$TOOLCHAIN_DIR/sysroot/usr/lib/aarch64-linux-android" -name "$library" \( -type f -o -type l \) -print -quit)"
         test -n "$found" || { echo "Required runtime library not found: $library" >&2; exit 1; }
-        cp -n "$found" "$OUTPUT_DIR/lib/"
+        cp -nL "$found" "$OUTPUT_DIR/lib/"
+    done < <("$ANDROID_READELF" -d "$binary" | sed -n 's/.*Shared library: \[\([^]]*\)\].*/\1/p' | sort -u)
+done
+
+for binary in "$OUTPUT_DIR/bin/authserver" "$OUTPUT_DIR/bin/worldserver"; do
+    while read -r library; do
+        case "$library" in
+            libc.so|libdl.so|liblog.so|libm.so|libandroid.so|libc++abi.so) continue ;;
+        esac
+        test -f "$OUTPUT_DIR/lib/$library" || { echo "Runtime artifact is missing $library required by $binary" >&2; exit 1; }
     done < <("$ANDROID_READELF" -d "$binary" | sed -n 's/.*Shared library: \[\([^]]*\)\].*/\1/p' | sort -u)
 done
 

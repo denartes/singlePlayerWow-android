@@ -22,7 +22,7 @@ Example branches:
 
 The Samsung Galaxy S25 is currently the integration-test device. Android-only changes produce `bygdok-eternal-debug`; server-runtime changes produce `bygdok-runtime-arm64`; changes affecting both paths use the integration workflow and produce both artifacts.
 
-The server-runtime workflow reuses the pinned AzerothCore commit, locked module list, Boost patch, Android API 30, ARM64, and CMake flags from `wowsp_cutoff.sh`. Hosted Ubuntu runners do not provide the Android-targeted MariaDB/readline/ncurses libraries used by the proven S25 build, so the workflow requires the runner environment to provide `ANDROID_MYSQL_ROOT` and `ANDROID_RUNTIME_LIB_DIR` through repository or organization configuration. It does not substitute host libraries or introduce Termux, Docker, containers, or emulation.
+The server-runtime workflow reuses the pinned AzerothCore commit, locked module list, Boost patch, Android API 30, ARM64, and CMake flags from `wowsp_cutoff.sh`. Before the server build, `scripts/build-android-deps.sh` builds pinned Android-native dependencies into `${RUNNER_TEMP}/bygdok-android-deps`; CI sets `BYGDOK_ANDROID_MYSQL_ROOT` and `BYGDOK_ANDROID_RUNTIME_LIB_DIR` from that job-owned prefix. No repository variables, secrets, Termux paths, developer workstations, Docker, containers, or emulation are used.
 
 ## One click install scripts 
 ### ⚡ Fast install, no compilation (~10 min):
