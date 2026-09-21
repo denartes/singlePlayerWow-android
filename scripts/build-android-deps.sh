@@ -1,4 +1,4 @@
-#!/usr/bin/env bash 
+#!/usr/bin/env bash  
 set -euo pipefail
 
 PREFIX="${ANDROID_DEPS_PREFIX:?ANDROID_DEPS_PREFIX must be set to a CI-owned staging prefix}"
