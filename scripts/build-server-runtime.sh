@@ -45,18 +45,27 @@ else
     git clone "$CORE_REPOSITORY" "$CORE_DIR"
     git -C "$CORE_DIR" fetch --depth=1 origin "$CORE_COMMIT"
     git -C "$CORE_DIR" checkout --detach "$CORE_COMMIT"
-
-    # Reuse the locked module list from the known-good Termux build script.
-    mkdir -p "$CORE_DIR/modules"
-    sed -n '/^MODULES=(/,/^)/p' "$REPO_DIR/wowsp_cutoff.sh" \
-        | grep '"https://' \
-        | sed -E 's/.*"(https:[^"]+) ([0-9a-f]+)".*/\1|\2/' \
-        | while IFS='|' read -r repository commit; do
-            name="$(basename "$repository" .git)"
-            git clone "$repository" "$CORE_DIR/modules/$name"
-            git -C "$CORE_DIR/modules/$name" checkout --detach "$commit"
-          done
 fi
+
+# Reuse the locked module list from the known-good Termux build script. Always
+# runs, even on a cache hit, so a partial/stale cached checkout can't silently
+# leave a pinned module missing (and its script loader symbol undefined).
+mkdir -p "$CORE_DIR/modules"
+sed -n '/^MODULES=(/,/^)/p' "$REPO_DIR/wowsp_cutoff.sh" \
+    | grep '"https://' \
+    | sed -E 's/.*"(https:[^"]+) ([0-9a-f]+)".*/\1|\2/' \
+    | while IFS='|' read -r repository commit; do
+        name="$(basename "$repository" .git)"
+        if [ -d "$CORE_DIR/modules/$name/.git" ]; then
+            current_commit="$(git -C "$CORE_DIR/modules/$name" rev-parse HEAD)"
+            if [ "$current_commit" = "$commit" ]; then
+                continue
+            fi
+            rm -rf "$CORE_DIR/modules/$name"
+        fi
+        git clone "$repository" "$CORE_DIR/modules/$name"
+        git -C "$CORE_DIR/modules/$name" checkout --detach "$commit"
+      done
 
 # Match the Boost compatibility patch used by wowsp_cutoff.sh.
 BOOST_CMAKE="$CORE_DIR/deps/boost/CMakeLists.txt"
