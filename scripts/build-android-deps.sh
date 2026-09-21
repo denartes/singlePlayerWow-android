@@ -166,21 +166,21 @@ build_mariadb() {
     local source maria_cmake remaining
     echo "[deps] MariaDB Connector/C 3.3.8"
     source="$(extract "$(download https://archive.mariadb.org/connector-c-3.3.8/mariadb-connector-c-3.3.8-src.tar.gz mariadb-connector-c-3.3.8-src.tar.gz)" mariadb-connector-c-3.3.8-src)"
-    echo "[deps] MariaDB source occurrences before ushort patch:"
+    echo "[deps] MariaDB source ushort tokens before patch:"
     while IFS= read -r -d '' source_file; do
-        if grep -qF '(ushort)' "$source_file"; then
-            grep -nF '(ushort)' "$source_file"
-            sed -i 's/(ushort)/(unsigned short)/g' "$source_file"
+        if grep -qP '\bushort\b' "$source_file"; then
+            grep -nP '\bushort\b' "$source_file"
+            perl -pi -e 's/\bushort\b/unsigned short/g' "$source_file"
         fi
     done < <(find "$source" -type f \( -name '*.c' -o -name '*.h' \) -print0)
 
-    remaining="$(grep -RInF --include='*.c' --include='*.h' '(ushort)' "$source" || true)"
+    remaining="$(grep -RInP --include='*.c' --include='*.h' '\bushort\b' "$source" || true)"
     if [ -n "$remaining" ]; then
-        echo "MariaDB ushort patch verification failed; remaining occurrences:" >&2
+        echo "MariaDB ushort token patch verification failed; remaining occurrences:" >&2
         printf '%s\n' "$remaining" >&2
         exit 1
     fi
-    echo "[deps] MariaDB source ushort patch verified: zero remaining occurrences"
+    echo "[deps] MariaDB source ushort token patch verified: zero remaining occurrences"
     maria_cmake="$source/CMakeLists.txt"
     grep -q 'SET(WARNING_AS_ERROR "-Werror")' "$maria_cmake"
     sed -i 's/IF ((NOT WIN32) AND (CMAKE_C_COMPILER_ID MATCHES "Clang" OR CMAKE_C_COMPILER_ID MATCHES "GNU"))/IF ((NOT WIN32) AND (NOT ANDROID) AND (CMAKE_C_COMPILER_ID MATCHES "Clang" OR CMAKE_C_COMPILER_ID MATCHES "GNU"))/' "$maria_cmake"
