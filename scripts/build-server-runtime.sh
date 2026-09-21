@@ -145,7 +145,7 @@ cp "$INSTALL_DIR/bin/authserver" "$OUTPUT_DIR/bin/"
 cp "$INSTALL_DIR/bin/worldserver" "$OUTPUT_DIR/bin/"
 
 for binary in "$OUTPUT_DIR/bin/authserver" "$OUTPUT_DIR/bin/worldserver"; do
-    "$ANDROID_READELF" -h "$binary" | grep -q 'AArch64' || { echo "Not an ARM64 ELF binary: $binary" >&2; exit 1; }
+    "$ANDROID_READELF" -h "$binary" | grep -qiE 'aarch64|em_aarch64' || { echo "Not an ARM64 ELF binary: $binary" >&2; exit 1; }
     while read -r library; do
         case "$library" in
             libc.so|libdl.so|liblog.so|libm.so|libandroid.so|libc++abi.so) continue ;;
