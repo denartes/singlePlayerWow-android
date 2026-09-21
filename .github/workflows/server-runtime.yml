@@ -31,6 +31,8 @@ jobs:
       ANDROID_NDK_VERSION: 29.0.14206865
       ANDROID_DEPS_PREFIX: ${{ github.workspace }}/.ci/bygdok-android-deps
       ANDROID_DEPS_SOURCE_DIR: ${{ github.workspace }}/.ci/bygdok-android-deps-src
+      CORE_DIR: ${{ github.workspace }}/.ci/azerothcore-android
+      BUILD_DIR: ${{ github.workspace }}/.ci/azerothcore-build
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -77,6 +79,18 @@ jobs:
         run: |
           echo "BYGDOK_ANDROID_MYSQL_ROOT=${ANDROID_DEPS_PREFIX}/mysql" >> "$GITHUB_ENV"
           echo "BYGDOK_ANDROID_RUNTIME_LIB_DIR=${ANDROID_DEPS_PREFIX}/lib" >> "$GITHUB_ENV"
+
+      - name: Cache AzerothCore source and build
+        id: server-build-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.CORE_DIR }}
+            ${{ env.BUILD_DIR }}
+          key: server-build-${{ runner.os }}-${{ env.ANDROID_NDK_VERSION }}-${{ env.ANDROID_API }}-${{ env.ANDROID_ABI }}-${{ hashFiles('wowsp_cutoff.sh', 'scripts/build-server-runtime.sh', 'scripts/build-android-deps.sh', 'modules/**', 'configs/**') }}
+
+      - name: Export server build cache status
+        run: echo "SERVER_BUILD_CACHE_HIT=${{ steps.server-build-cache.outputs.cache-hit }}" >> "$GITHUB_ENV"
 
       - name: Build and package server runtime
         run: bash scripts/build-server-runtime.sh

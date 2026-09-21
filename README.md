@@ -22,6 +22,8 @@ Example branches:
 
 The Samsung Galaxy S25 is currently the integration-test device. Android-only changes produce `bygdok-eternal-debug`; server-runtime changes produce `bygdok-runtime-arm64`; changes affecting both paths use the integration workflow and produce both artifacts.
 
+The server-runtime workflow caches the pinned AzerothCore source and Ninja build directory using the core/module/configuration commit inputs, Android API, ABI, and NDK version. The first build for a new cache key is still a full build; later matching runs reuse unchanged objects and rebuild only targets affected by the changed inputs. Install and runtime packaging output is regenerated on every run.
+
 The server-runtime workflow reuses the pinned AzerothCore commit, locked module list, Boost patch, Android API 30, ARM64, and CMake flags from `wowsp_cutoff.sh`. Before the server build, `scripts/build-android-deps.sh` builds pinned Android-native dependencies into the ephemeral `${{ github.workspace }}/.ci/bygdok-android-deps` prefix; CI sets `BYGDOK_ANDROID_MYSQL_ROOT` and `BYGDOK_ANDROID_RUNTIME_LIB_DIR` from that job-owned prefix. No repository variables, secrets, Termux paths, developer workstations, Docker, containers, or emulation are used.
 
 ## One click install scripts 

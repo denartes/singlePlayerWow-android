@@ -9,6 +9,7 @@ OUTPUT_DIR="${OUTPUT_DIR:-${REPO_DIR}/runtime/build/bygdok-runtime-arm64}"
 CORE_COMMIT="abc884520173084d5cd37b72b57b3822230dcb32"
 CORE_REPOSITORY="https://github.com/duall/azerothcore-android.git"
 ANDROID_API="${ANDROID_API:-30}"
+SERVER_BUILD_CACHE_HIT="${SERVER_BUILD_CACHE_HIT:-false}"
 
 : "${ANDROID_NDK_ROOT:?ANDROID_NDK_ROOT must point to Android NDK r29}"
 ANDROID_MYSQL_ROOT="${ANDROID_MYSQL_ROOT:-${BYGDOK_ANDROID_MYSQL_ROOT:-}}"
@@ -35,26 +36,32 @@ for required in \
     test -e "$required" || { echo "Missing staged Android dependency: $required" >&2; exit 1; }
 done
 
-rm -rf "$CORE_DIR" "$BUILD_DIR" "$INSTALL_DIR" "$OUTPUT_DIR"
-git clone "$CORE_REPOSITORY" "$CORE_DIR"
-git -C "$CORE_DIR" fetch --depth=1 origin "$CORE_COMMIT"
-git -C "$CORE_DIR" checkout --detach "$CORE_COMMIT"
+rm -rf "$INSTALL_DIR" "$OUTPUT_DIR"
+if [ "$SERVER_BUILD_CACHE_HIT" = "true" ] && [ -d "$CORE_DIR/.git" ] && [ -f "$BUILD_DIR/CMakeCache.txt" ]; then
+    echo "[server] Reusing cached AzerothCore source and build directory"
+else
+    echo "[server] No compatible AzerothCore build cache; performing clean checkout"
+    rm -rf "$CORE_DIR" "$BUILD_DIR"
+    git clone "$CORE_REPOSITORY" "$CORE_DIR"
+    git -C "$CORE_DIR" fetch --depth=1 origin "$CORE_COMMIT"
+    git -C "$CORE_DIR" checkout --detach "$CORE_COMMIT"
+
+    # Reuse the locked module list from the known-good Termux build script.
+    mkdir -p "$CORE_DIR/modules"
+    sed -n '/^MODULES=(/,/^)/p' "$REPO_DIR/wowsp_cutoff.sh" \
+        | grep '"https://' \
+        | sed -E 's/.*"(https:[^"]+) ([0-9a-f]+)".*/\1|\2/' \
+        | while IFS='|' read -r repository commit; do
+            name="$(basename "$repository" .git)"
+            git clone "$repository" "$CORE_DIR/modules/$name"
+            git -C "$CORE_DIR/modules/$name" checkout --detach "$commit"
+          done
+fi
 
 # Match the Boost compatibility patch used by wowsp_cutoff.sh.
 BOOST_CMAKE="$CORE_DIR/deps/boost/CMakeLists.txt"
 sed -i -E 's/ system / /g; s/ system$//g; s/^system //g' "$BOOST_CMAKE"
 grep -q 'CMP0167' "$BOOST_CMAKE" || sed -i '1i cmake_policy(SET CMP0167 OLD)' "$BOOST_CMAKE"
-
-# Reuse the locked module list from the known-good Termux build script.
-mkdir -p "$CORE_DIR/modules"
-sed -n '/^MODULES=(/,/^)/p' "$REPO_DIR/wowsp_cutoff.sh" \
-    | grep '"https://' \
-    | sed -E 's/.*"(https:[^"]+) ([0-9a-f]+)".*/\1|\2/' \
-    | while IFS='|' read -r repository commit; do
-        name="$(basename "$repository" .git)"
-        git clone "$repository" "$CORE_DIR/modules/$name"
-        git -C "$CORE_DIR/modules/$name" checkout --detach "$commit"
-      done
 
 # Build the modules maintained in this monorepo from the same commit.
 for module in "$REPO_DIR"/modules/*; do
