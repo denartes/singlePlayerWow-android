@@ -80,11 +80,13 @@ OPENSSL_ROOT="$BOOST_ROOT"
 OPENSSL_INCLUDE_DIR="$OPENSSL_ROOT/include"
 OPENSSL_CRYPTO_LIBRARY="$OPENSSL_ROOT/lib/libcrypto.so"
 OPENSSL_SSL_LIBRARY="$OPENSSL_ROOT/lib/libssl.so"
+PTHREAD_LIBRARY="$BOOST_ROOT/lib/libpthread.so"
 test -f "$BOOST_INCLUDEDIR/boost/version.hpp" || { echo "Missing staged Boost headers: $BOOST_INCLUDEDIR/boost/version.hpp" >&2; exit 1; }
 test -n "$(find "$BOOST_LIBRARYDIR" -maxdepth 1 -name 'libboost*' -print -quit)" || { echo "Missing staged Boost libraries: $BOOST_LIBRARYDIR" >&2; exit 1; }
 test -f "$OPENSSL_INCLUDE_DIR/openssl/ssl.h" || { echo "Missing staged OpenSSL headers: $OPENSSL_INCLUDE_DIR/openssl/ssl.h" >&2; exit 1; }
 test -f "$OPENSSL_CRYPTO_LIBRARY" || { echo "Missing staged OpenSSL crypto library: $OPENSSL_CRYPTO_LIBRARY" >&2; exit 1; }
 test -f "$OPENSSL_SSL_LIBRARY" || { echo "Missing staged OpenSSL SSL library: $OPENSSL_SSL_LIBRARY" >&2; exit 1; }
+test -e "$PTHREAD_LIBRARY" || { echo "Missing staged Android pthread linker alias: $PTHREAD_LIBRARY" >&2; exit 1; }
 echo "[server] Staged Boost headers:"
 find "$BOOST_INCLUDEDIR" -path '*boost/version.hpp' -print
 echo "[server] Staged Boost libraries:"
@@ -119,7 +121,7 @@ cmake -S "$CORE_DIR" -B "$BUILD_DIR" -G Ninja \
     -DCMAKE_LIBRARY_PATH="$ANDROID_MYSQL_ROOT/../lib" \
     -DWITH_WARNINGS=1 -DTOOLS_BUILD=none -DSCRIPTS=static \
     -DCMAKE_CXX_FLAGS="-D__ANDROID__ -DANDROID -Wno-deprecated-literal-operator" \
-    -DCMAKE_EXE_LINKER_FLAGS="-Wl,--allow-multiple-definition -lunwind"
+    -DCMAKE_EXE_LINKER_FLAGS="-L$BOOST_LIBRARYDIR -Wl,--allow-multiple-definition -lunwind"
 cmake --build "$BUILD_DIR" --parallel
 cmake --install "$BUILD_DIR"
 

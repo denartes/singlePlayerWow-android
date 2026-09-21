@@ -224,6 +224,7 @@ build_mariadb
 
 cp -f "$TOOLCHAIN/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so" "$PREFIX/lib/"
 cp -f "$TOOLCHAIN/sysroot/usr/lib/aarch64-linux-android/libunwind.so" "$PREFIX/lib/" 2>/dev/null || true
+ln -sf "$TOOLCHAIN/sysroot/usr/lib/aarch64-linux-android/$API/libc.so" "$PREFIX/lib/libpthread.so"
 
 test -f "$PREFIX/mysql/bin/mysql_config"
 test -f "$PREFIX/include/mysql.h" || test -f "$PREFIX/include/mariadb/mysql.h"
@@ -232,4 +233,5 @@ test -f "$PREFIX/lib/libssl.so"
 test -f "$PREFIX/lib/libcrypto.so"
 test -f "$PREFIX/lib/libreadline.so"
 test -f "$PREFIX/lib/libncurses.so"
+test -e "$PREFIX/lib/libpthread.so"
 touch "$PREFIX/.build-complete"
