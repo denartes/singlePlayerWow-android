@@ -56,6 +56,12 @@ sed -n '/^MODULES=(/,/^)/p' "$REPO_DIR/wowsp_cutoff.sh" \
     | sed -E 's/.*"(https:[^"]+) ([0-9a-f]+)".*/\1|\2/' \
     | while IFS='|' read -r repository commit; do
         name="$(basename "$repository" .git)"
+        # At its pinned commit, mod-ah-bot-plus's script loader only defines
+        # Addmod_ah_botScripts(), so it must be staged under the "mod-ah-bot"
+        # directory name for AzerothCore's generated loader call to resolve.
+        if [ "$name" = "mod-ah-bot-plus" ]; then
+            name="mod-ah-bot"
+        fi
         if [ -d "$CORE_DIR/modules/$name/.git" ]; then
             current_commit="$(git -C "$CORE_DIR/modules/$name" rev-parse HEAD)"
             if [ "$current_commit" = "$commit" ]; then
