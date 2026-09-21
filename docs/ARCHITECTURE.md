@@ -5,16 +5,16 @@ Bygdok Eternal is one monorepo. The existing AzerothCore server tree, modules, p
 ## Target Architecture
 
 ```text
-Android UI
+Android UI (dashboard, Start/Stop, live status + log)
     |
     v
-Android foreground server service
+RealmForegroundService (Android foreground service)
     |
     v
-Bygdok native runtime
+Bygdok native runtime (embedded in jniLibs/arm64-v8a, launched via ProcessBuilder)
     ├── authserver
     ├── worldserver
-    └── database runtime
+    └── mariadbd (embedded MariaDB server, no external DB dependency)
     |
     v
 Persistent realm data
@@ -28,13 +28,14 @@ Persistent realm data
     └── backups
 ```
 
-The Android application is the future management and hosting layer. The `runtime/` directory is reserved for packaging the existing Android-native server runtime; it does not launch, download, or contain that runtime yet.
+The Android application is the management and hosting layer. The `runtime/` directory holds the packaged Android-native server runtime (authserver, worldserver, mariadbd, and their `.so` dependencies), built by `scripts/build-server-runtime.sh` in CI. The `android.yml` workflow depends on `server-runtime.yml`, downloads its artifact, and a Gradle task (`embedNativeRuntime` in `android/app/build.gradle.kts`) stages it into `jniLibs/arm64-v8a/` under the `lib*.so` naming convention required for Android to extract executables into a non-writable, executable `nativeLibraryDir`. `RealmForegroundService` launches `libmariadbd.so`, then `libauthserver.so`, then `libworldserver.so` directly from that directory.
 
-## Unresolved Work
+## Implementation Status
 
-- Native runtime integration into the Android application is unresolved.
-- The database runtime and its Android packaging are unresolved.
-- The foreground server service is a future design boundary, not an implementation in this scaffold.
+- Native runtime embedding (jniLibs staging, `RealmForegroundService` process orchestration, config/asset patching, dashboard wiring) is implemented but **not yet validated on a physical device** — it has not been run through CI or the S25 test device.
+- The embedded MariaDB server cross-compile (`build_mariadb_server` in `scripts/build-android-deps.sh`) is experimental and highest-risk: it is the least proven part of the toolchain and is expected to need iterative CI-log-driven fixes.
+- MariaDB's `basedir`/error-message-file requirements on-device are unconfirmed; `mariadbd` may need its `share/errmsg.sys` (and related locale files) packaged and referenced explicitly if it fails to start.
+- Worldserver's client data (maps/vmaps/mmaps/dbc, ~2 GB) is downloaded on first run from the same URL the existing Termux scripts use (`RealmClientData`); it is not bundled in the APK.
 
 No runtime mechanism is assumed until it is demonstrated in the working ARM64 environment.
 

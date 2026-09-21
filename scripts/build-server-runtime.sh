@@ -142,11 +142,36 @@ cmake -S "$CORE_DIR" -B "$BUILD_DIR" -G Ninja \
 cmake --build "$BUILD_DIR" --parallel
 cmake --install "$BUILD_DIR"
 
-mkdir -p "$OUTPUT_DIR/bin" "$OUTPUT_DIR/lib"
+mkdir -p "$OUTPUT_DIR/bin" "$OUTPUT_DIR/lib" "$OUTPUT_DIR/sql"
 cp "$INSTALL_DIR/bin/authserver" "$OUTPUT_DIR/bin/"
 cp "$INSTALL_DIR/bin/worldserver" "$OUTPUT_DIR/bin/"
 
-for binary in "$OUTPUT_DIR/bin/authserver" "$OUTPUT_DIR/bin/worldserver"; do
+# mariadbd (and its optional CLI client) make the runtime artifact
+# self-sufficient: no external/Termux-hosted database is required.
+cp "$ANDROID_RUNTIME_LIB_DIR/mariadbd" "$OUTPUT_DIR/bin/"
+if [ -f "$ANDROID_RUNTIME_LIB_DIR/mariadb_client" ]; then
+    cp "$ANDROID_RUNTIME_LIB_DIR/mariadb_client" "$OUTPUT_DIR/bin/"
+fi
+
+# Mirror the SQL update tree so the on-device AzerothCore updater can find
+# base/update SQL via SourceDirectory, matching how the source checkout is
+# laid out for authserver/worldserver's own DBUpdater.
+if [ -d "$CORE_DIR/data/sql" ]; then
+    mkdir -p "$OUTPUT_DIR/sql/data"
+    cp -R "$CORE_DIR/data/sql" "$OUTPUT_DIR/sql/data/"
+fi
+for module_dir in "$CORE_DIR"/modules/*; do
+    test -d "$module_dir" || continue
+    module_name="$(basename "$module_dir")"
+    for sql_dir in "$module_dir/data/sql" "$module_dir/sql"; do
+        test -d "$sql_dir" || continue
+        mkdir -p "$OUTPUT_DIR/sql/modules/$module_name"
+        cp -R "$sql_dir" "$OUTPUT_DIR/sql/modules/$module_name/"
+    done
+done
+
+for binary in "$OUTPUT_DIR/bin/authserver" "$OUTPUT_DIR/bin/worldserver" "$OUTPUT_DIR/bin/mariadbd"; do
+    test -f "$binary" || continue
     while read -r library; do
         case "$library" in
             libc.so|libdl.so|liblog.so|libm.so|libandroid.so|libc++abi.so) continue ;;
@@ -157,7 +182,8 @@ for binary in "$OUTPUT_DIR/bin/authserver" "$OUTPUT_DIR/bin/worldserver"; do
     done < <("$ANDROID_READELF" -d "$binary" | sed -n 's/.*Shared library: \[\([^]]*\)\].*/\1/p' | sort -u)
 done
 
-for binary in "$OUTPUT_DIR/bin/authserver" "$OUTPUT_DIR/bin/worldserver"; do
+for binary in "$OUTPUT_DIR/bin/authserver" "$OUTPUT_DIR/bin/worldserver" "$OUTPUT_DIR/bin/mariadbd"; do
+    test -f "$binary" || continue
     while read -r library; do
         case "$library" in
             libc.so|libdl.so|liblog.so|libm.so|libandroid.so|libc++abi.so) continue ;;

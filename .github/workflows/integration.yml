@@ -19,6 +19,5 @@ jobs:
     uses: ./.github/workflows/android.yml
     secrets: inherit
 
-  server-runtime:
-    uses: ./.github/workflows/server-runtime.yml
-    secrets: inherit
+  # server-runtime is no longer a separate parallel job here: android.yml
+  # now depends on it directly so the APK always embeds a matching runtime.

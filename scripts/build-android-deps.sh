@@ -213,6 +213,55 @@ EOF
     chmod +x "$PREFIX/mysql/bin/mysql_config"
 }
 
+# EXPERIMENTAL: cross-compiles the actual MariaDB database server (mariadbd),
+# not just the client library above. This is required for the app to be
+# self-sufficient (no external/Termux-hosted database). Unlike the other
+# functions in this script, this has not been validated by a successful CI
+# run yet and is the most likely piece to need iteration.
+build_mariadb_server() {
+    local archive source build mariadbd client_cli
+    echo "[deps] MariaDB Server 10.11.9 (mariadbd)"
+    archive="$(download https://archive.mariadb.org/mariadb-10.11.9/source/mariadb-10.11.9.tar.gz mariadb-10.11.9.tar.gz)"
+    source="$(extract "$archive" mariadb-10.11.9)"
+    build="$SOURCE_DIR/mariadb-server-build"
+
+    if [ ! -f "$PREFIX/lib/mariadbd" ]; then
+        mkdir -p "$build"
+        cmake -S "$source" -B "$build" -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$NDK_ROOT/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI="$ABI" -DANDROID_PLATFORM="android-$API" \
+            -DCMAKE_INSTALL_PREFIX="$PREFIX/server" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+            -DCMAKE_FIND_ROOT_PATH="$PREFIX" \
+            -DWITH_SSL="$PREFIX" -DOPENSSL_ROOT_DIR="$PREFIX" \
+            -DWITH_ZLIB=system -DZLIB_ROOT="$PREFIX" \
+            -DWITH_PCRE=bundled \
+            -DWITH_READLINE=OFF \
+            -DWITH_WSREP=OFF \
+            -DWITHOUT_TOKUDB=1 -DWITHOUT_ROCKSDB=1 -DWITHOUT_MROONGA=1 \
+            -DWITHOUT_OQGRAPH=1 -DWITHOUT_SPHINX=1 -DWITHOUT_SPIDER=1 \
+            -DWITHOUT_CONNECT=1 -DWITHOUT_COLUMNSTORE=1 -DWITHOUT_S3=1 \
+            -DWITH_UNIT_TESTS=OFF \
+            -DWITH_EMBEDDED_SERVER=OFF \
+            -DCMAKE_C_FLAGS="-Wno-error" \
+            -DCMAKE_CXX_FLAGS="-Wno-error -D__ANDROID__"
+        cmake --build "$build" --parallel "$JOBS"
+        cmake --install "$build"
+    fi
+
+    mariadbd="$(find "$PREFIX/server" -type f \( -name mariadbd -o -name mysqld \) -print -quit)"
+    test -n "$mariadbd" || { echo "MariaDB server build did not produce mariadbd/mysqld" >&2; exit 1; }
+    cp -f "$mariadbd" "$PREFIX/lib/mariadbd"
+    chmod +x "$PREFIX/lib/mariadbd"
+
+    client_cli="$(find "$PREFIX/server" -type f \( -name mariadb -o -name mysql \) -print -quit)"
+    if [ -n "$client_cli" ]; then
+        cp -f "$client_cli" "$PREFIX/lib/mariadb_client"
+        chmod +x "$PREFIX/lib/mariadb_client"
+    fi
+}
+
 build_zlib
 build_openssl
 build_xz
@@ -221,6 +270,7 @@ build_readline
 build_bzip2
 build_boost
 build_mariadb
+build_mariadb_server
 
 cp -f "$TOOLCHAIN/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so" "$PREFIX/lib/"
 cp -f "$TOOLCHAIN/sysroot/usr/lib/aarch64-linux-android/libunwind.so" "$PREFIX/lib/" 2>/dev/null || true
@@ -234,4 +284,5 @@ test -f "$PREFIX/lib/libcrypto.so"
 test -f "$PREFIX/lib/libreadline.so"
 test -f "$PREFIX/lib/libncurses.so"
 test -e "$PREFIX/lib/libpthread.so"
+test -x "$PREFIX/lib/mariadbd"
 touch "$PREFIX/.build-complete"
