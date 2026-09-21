@@ -69,8 +69,15 @@ export CMAKE_PREFIX_PATH="$ANDROID_MYSQL_ROOT/..:$ANDROID_MYSQL_ROOT:$ANDROID_RU
 BOOST_ROOT="$(cd "$ANDROID_MYSQL_ROOT/.." && pwd)"
 BOOST_INCLUDEDIR="$BOOST_ROOT/include"
 BOOST_LIBRARYDIR="$BOOST_ROOT/lib"
+OPENSSL_ROOT="$BOOST_ROOT"
+OPENSSL_INCLUDE_DIR="$OPENSSL_ROOT/include"
+OPENSSL_CRYPTO_LIBRARY="$OPENSSL_ROOT/lib/libcrypto.so"
+OPENSSL_SSL_LIBRARY="$OPENSSL_ROOT/lib/libssl.so"
 test -f "$BOOST_INCLUDEDIR/boost/version.hpp" || { echo "Missing staged Boost headers: $BOOST_INCLUDEDIR/boost/version.hpp" >&2; exit 1; }
 test -n "$(find "$BOOST_LIBRARYDIR" -maxdepth 1 -name 'libboost*' -print -quit)" || { echo "Missing staged Boost libraries: $BOOST_LIBRARYDIR" >&2; exit 1; }
+test -f "$OPENSSL_INCLUDE_DIR/openssl/ssl.h" || { echo "Missing staged OpenSSL headers: $OPENSSL_INCLUDE_DIR/openssl/ssl.h" >&2; exit 1; }
+test -f "$OPENSSL_CRYPTO_LIBRARY" || { echo "Missing staged OpenSSL crypto library: $OPENSSL_CRYPTO_LIBRARY" >&2; exit 1; }
+test -f "$OPENSSL_SSL_LIBRARY" || { echo "Missing staged OpenSSL SSL library: $OPENSSL_SSL_LIBRARY" >&2; exit 1; }
 echo "[server] Staged Boost headers:"
 find "$BOOST_INCLUDEDIR" -path '*boost/version.hpp' -print
 echo "[server] Staged Boost libraries:"
@@ -96,7 +103,10 @@ cmake -S "$CORE_DIR" -B "$BUILD_DIR" -G Ninja \
     -DMYSQL_CONFIG="$ANDROID_MYSQL_ROOT/bin/mysql_config" \
     -DMYSQL_INCLUDE_DIR="$ANDROID_MYSQL_ROOT/../include" \
     -DMYSQL_LIBRARY="$ANDROID_MYSQL_ROOT/../lib/libmariadb.so" \
-    -DOPENSSL_ROOT_DIR="$ANDROID_MYSQL_ROOT/.." \
+    -DOPENSSL_ROOT_DIR="$OPENSSL_ROOT" \
+    -DOPENSSL_INCLUDE_DIR="$OPENSSL_INCLUDE_DIR" \
+    -DOPENSSL_CRYPTO_LIBRARY="$OPENSSL_CRYPTO_LIBRARY" \
+    -DOPENSSL_SSL_LIBRARY="$OPENSSL_SSL_LIBRARY" \
     -DREADLINE_INCLUDE_DIR="$ANDROID_MYSQL_ROOT/../include" \
     -DREADLINE_LIBRARY="$ANDROID_MYSQL_ROOT/../lib/libreadline.so" \
     -DCMAKE_LIBRARY_PATH="$ANDROID_MYSQL_ROOT/../lib" \
