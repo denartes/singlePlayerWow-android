@@ -65,6 +65,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install --yes cmake ninja-build git make perl
 
       - name: Cache Android native dependencies
+        id: android-deps-cache
         uses: actions/cache@v4
         with:
           path: |
@@ -72,7 +73,19 @@ jobs:
             ${{ env.ANDROID_DEPS_SOURCE_DIR }}
           key: android-deps-${{ runner.os }}-${{ env.ANDROID_NDK_VERSION }}-${{ env.ANDROID_API }}-${{ env.ANDROID_ABI }}-${{ hashFiles('scripts/build-android-deps.sh') }}
 
+      - name: Check Android dependency completion
+        run: |
+          echo "Android deps cache hit: ${{ steps.android-deps-cache.outputs.cache-hit }}"
+          if [ -f "${ANDROID_DEPS_PREFIX}/.build-complete" ]; then
+            echo "Android dependency completion marker present"
+            echo "ANDROID_DEPS_COMPLETE=true" >> "$GITHUB_ENV"
+          else
+            echo "Android dependency completion marker missing"
+            echo "ANDROID_DEPS_COMPLETE=false" >> "$GITHUB_ENV"
+          fi
+
       - name: Build Android native dependencies
+        if: env.ANDROID_DEPS_COMPLETE != 'true'
         run: bash scripts/build-android-deps.sh
 
       - name: Export staged dependency paths
@@ -88,9 +101,13 @@ jobs:
             ${{ env.CORE_DIR }}
             ${{ env.BUILD_DIR }}
           key: server-build-${{ runner.os }}-${{ env.ANDROID_NDK_VERSION }}-${{ env.ANDROID_API }}-${{ env.ANDROID_ABI }}-${{ hashFiles('wowsp_cutoff.sh', 'scripts/build-server-runtime.sh', 'scripts/build-android-deps.sh', 'modules/**', 'configs/**') }}
+          restore-keys: |
+            server-build-${{ runner.os }}-${{ env.ANDROID_NDK_VERSION }}-${{ env.ANDROID_API }}-${{ env.ANDROID_ABI }}-
 
       - name: Export server build cache status
-        run: echo "SERVER_BUILD_CACHE_HIT=${{ steps.server-build-cache.outputs.cache-hit }}" >> "$GITHUB_ENV"
+        run: |
+          echo "Server build exact cache hit: ${{ steps.server-build-cache.outputs.cache-hit }}"
+          echo "SERVER_BUILD_CACHE_HIT=${{ steps.server-build-cache.outputs.cache-hit }}" >> "$GITHUB_ENV"
 
       - name: Build and package server runtime
         run: bash scripts/build-server-runtime.sh

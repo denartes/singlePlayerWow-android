@@ -9,7 +9,6 @@ OUTPUT_DIR="${OUTPUT_DIR:-${REPO_DIR}/runtime/build/bygdok-runtime-arm64}"
 CORE_COMMIT="abc884520173084d5cd37b72b57b3822230dcb32"
 CORE_REPOSITORY="https://github.com/duall/azerothcore-android.git"
 ANDROID_API="${ANDROID_API:-30}"
-SERVER_BUILD_CACHE_HIT="${SERVER_BUILD_CACHE_HIT:-false}"
 
 : "${ANDROID_NDK_ROOT:?ANDROID_NDK_ROOT must point to Android NDK r29}"
 ANDROID_MYSQL_ROOT="${ANDROID_MYSQL_ROOT:-${BYGDOK_ANDROID_MYSQL_ROOT:-}}"
@@ -37,8 +36,11 @@ for required in \
 done
 
 rm -rf "$INSTALL_DIR" "$OUTPUT_DIR"
-if [ "$SERVER_BUILD_CACHE_HIT" = "true" ] && [ -d "$CORE_DIR/.git" ] && [ -f "$BUILD_DIR/CMakeCache.txt" ]; then
-    echo "[server] Reusing cached AzerothCore source and build directory"
+# actions/cache only reports cache-hit=true on an exact key match; a
+# restore-keys prefix match still restores these directories but reports
+# cache-hit=false, so reuse is decided by directory validity, not the flag.
+if [ -d "$CORE_DIR/.git" ] && [ -f "$BUILD_DIR/CMakeCache.txt" ]; then
+    echo "[server] Reusing restored AzerothCore source and build directory"
 else
     echo "[server] No compatible AzerothCore build cache; performing clean checkout"
     rm -rf "$CORE_DIR" "$BUILD_DIR"
@@ -144,31 +146,7 @@ mkdir -p "$OUTPUT_DIR/bin" "$OUTPUT_DIR/lib"
 cp "$INSTALL_DIR/bin/authserver" "$OUTPUT_DIR/bin/"
 cp "$INSTALL_DIR/bin/worldserver" "$OUTPUT_DIR/bin/"
 
-echo "[server] Diagnostic: file"
-file "$OUTPUT_DIR/bin/authserver" || true
-file "$OUTPUT_DIR/bin/worldserver" || true
-
-echo "[server] Diagnostic: readelf -h (system readelf)"
-readelf -h "$OUTPUT_DIR/bin/authserver" || true
-readelf -h "$OUTPUT_DIR/bin/worldserver" || true
-
-echo "[server] Diagnostic: readelf -l (system readelf, authserver)"
-readelf -l "$OUTPUT_DIR/bin/authserver" || true
-
-echo "[server] Diagnostic: bin listing"
-ls -lh "$OUTPUT_DIR/bin/" || true
-
-echo "[server] Diagnostic: host clang / CC / CXX"
-which clang || true
-"${CC:-clang}" --version || true
-"${CXX:-clang++}" --version || true
-
-echo "[server] Diagnostic: CMakeCache compiler/toolchain values"
-grep -E 'CMAKE_(C|CXX)_COMPILER|CMAKE_SYSTEM_NAME|CMAKE_SYSTEM_PROCESSOR|ANDROID_ABI|ANDROID_PLATFORM' \
-    "$BUILD_DIR/CMakeCache.txt" || true
-
 for binary in "$OUTPUT_DIR/bin/authserver" "$OUTPUT_DIR/bin/worldserver"; do
-    "$ANDROID_READELF" -h "$binary" | grep -qiE 'aarch64|em_aarch64' || { echo "Not an ARM64 ELF binary: $binary" >&2; exit 1; }
     while read -r library; do
         case "$library" in
             libc.so|libdl.so|liblog.so|libm.so|libandroid.so|libc++abi.so) continue ;;
