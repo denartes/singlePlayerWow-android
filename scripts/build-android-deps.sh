@@ -197,6 +197,10 @@ build_mariadb() {
     test -n "$library" || { echo 'MariaDB Connector/C did not install libmariadb.so' >&2; exit 1; }
     cp -f "$library" "$PREFIX/lib/libmariadb.so"
     cp -R "$PREFIX/mysql/include/." "$PREFIX/include/"
+    if [ ! -f "$PREFIX/include/mysql.h" ] && [ -d "$PREFIX/mysql/include/mariadb" ]; then
+        cp -R "$PREFIX/mysql/include/mariadb/." "$PREFIX/include/"
+    fi
+    test -f "$PREFIX/include/mysql.h" || { echo "MariaDB headers did not provide expected mysql.h under $PREFIX/include" >&2; exit 1; }
     cat > "$PREFIX/mysql/bin/mysql_config" <<EOF
 #!/usr/bin/env sh
 case "\${1:-}" in
