@@ -144,6 +144,29 @@ mkdir -p "$OUTPUT_DIR/bin" "$OUTPUT_DIR/lib"
 cp "$INSTALL_DIR/bin/authserver" "$OUTPUT_DIR/bin/"
 cp "$INSTALL_DIR/bin/worldserver" "$OUTPUT_DIR/bin/"
 
+echo "[server] Diagnostic: file"
+file "$OUTPUT_DIR/bin/authserver" || true
+file "$OUTPUT_DIR/bin/worldserver" || true
+
+echo "[server] Diagnostic: readelf -h (system readelf)"
+readelf -h "$OUTPUT_DIR/bin/authserver" || true
+readelf -h "$OUTPUT_DIR/bin/worldserver" || true
+
+echo "[server] Diagnostic: readelf -l (system readelf, authserver)"
+readelf -l "$OUTPUT_DIR/bin/authserver" || true
+
+echo "[server] Diagnostic: bin listing"
+ls -lh "$OUTPUT_DIR/bin/" || true
+
+echo "[server] Diagnostic: host clang / CC / CXX"
+which clang || true
+"${CC:-clang}" --version || true
+"${CXX:-clang++}" --version || true
+
+echo "[server] Diagnostic: CMakeCache compiler/toolchain values"
+grep -E 'CMAKE_(C|CXX)_COMPILER|CMAKE_SYSTEM_NAME|CMAKE_SYSTEM_PROCESSOR|ANDROID_ABI|ANDROID_PLATFORM' \
+    "$BUILD_DIR/CMakeCache.txt" || true
+
 for binary in "$OUTPUT_DIR/bin/authserver" "$OUTPUT_DIR/bin/worldserver"; do
     "$ANDROID_READELF" -h "$binary" | grep -qiE 'aarch64|em_aarch64' || { echo "Not an ARM64 ELF binary: $binary" >&2; exit 1; }
     while read -r library; do
