@@ -66,6 +66,15 @@ done
 export PATH="$ANDROID_MYSQL_ROOT/bin:$PATH"
 export MYSQL_HOME="$ANDROID_MYSQL_ROOT"
 export CMAKE_PREFIX_PATH="$ANDROID_MYSQL_ROOT/..:$ANDROID_MYSQL_ROOT:$ANDROID_RUNTIME_LIB_DIR"
+BOOST_ROOT="$(cd "$ANDROID_MYSQL_ROOT/.." && pwd)"
+BOOST_INCLUDEDIR="$BOOST_ROOT/include"
+BOOST_LIBRARYDIR="$BOOST_ROOT/lib"
+test -f "$BOOST_INCLUDEDIR/boost/version.hpp" || { echo "Missing staged Boost headers: $BOOST_INCLUDEDIR/boost/version.hpp" >&2; exit 1; }
+test -n "$(find "$BOOST_LIBRARYDIR" -maxdepth 1 -name 'libboost*' -print -quit)" || { echo "Missing staged Boost libraries: $BOOST_LIBRARYDIR" >&2; exit 1; }
+echo "[server] Staged Boost headers:"
+find "$BOOST_INCLUDEDIR" -path '*boost/version.hpp' -print
+echo "[server] Staged Boost libraries:"
+find "$BOOST_LIBRARYDIR" -maxdepth 1 -name 'libboost*' -print
 mkdir -p "$BUILD_DIR" "$INSTALL_DIR"
 cmake -S "$CORE_DIR" -B "$BUILD_DIR" -G Ninja \
     -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake" \
@@ -75,6 +84,12 @@ cmake -S "$CORE_DIR" -B "$BUILD_DIR" -G Ninja \
     -DCMAKE_C_COMPILER="$ANDROID_CLANG" \
     -DCMAKE_CXX_COMPILER="$ANDROID_CLANGXX" \
     -DANDROID_STL=c++_shared \
+    -DBOOST_ROOT="$BOOST_ROOT" \
+    -DBOOST_INCLUDEDIR="$BOOST_INCLUDEDIR" \
+    -DBOOST_LIBRARYDIR="$BOOST_LIBRARYDIR" \
+    -DBoost_NO_SYSTEM_PATHS=ON \
+    -DBoost_USE_STATIC_LIBS=ON \
+    -DBoost_USE_MULTITHREADED=ON \
     -DMYSQL_CONFIG="$ANDROID_MYSQL_ROOT/bin/mysql_config" \
     -DMYSQL_INCLUDE_DIR="$ANDROID_MYSQL_ROOT/../include" \
     -DMYSQL_LIBRARY="$ANDROID_MYSQL_ROOT/../lib/libmariadb.so" \
