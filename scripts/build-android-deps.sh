@@ -246,6 +246,9 @@ build_mariadb_server() {
             -DWITH_ZLIB=system -DZLIB_ROOT="$PREFIX" \
             -DWITH_PCRE=bundled \
             -DWITH_READLINE=OFF \
+            -DCURSES_INCLUDE_PATH="$PREFIX/include/ncursesw" \
+            -DCURSES_INCLUDE_DIR="$PREFIX/include/ncursesw" \
+            -DCURSES_LIBRARY="$PREFIX/lib/libncurses.so" \
             -DWITH_WSREP=OFF \
             -DWITHOUT_TOKUDB=1 -DWITHOUT_ROCKSDB=1 -DWITHOUT_MROONGA=1 \
             -DWITHOUT_OQGRAPH=1 -DWITHOUT_SPHINX=1 -DWITHOUT_SPIDER=1 \
