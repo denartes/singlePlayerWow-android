@@ -62,7 +62,11 @@ jobs:
         run: echo "ANDROID_NDK_ROOT=${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}" >> "$GITHUB_ENV"
 
       - name: Install server build tools
-        run: sudo apt-get update && sudo apt-get install --yes cmake ninja-build git make perl
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            cmake ninja-build git make perl \
+            libncurses-dev libreadline-dev
 
       - name: Cache Android native dependencies
         id: android-deps-cache
