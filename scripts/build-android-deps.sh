@@ -30,7 +30,15 @@ download() {
     local url="$1" name="$2"
     local archive="$SOURCE_DIR/$name"
     if [ ! -f "$archive" ]; then
-        curl --fail --location --retry 3 --output "$archive" "$url"
+        if ! curl --fail --location --retry 3 --output "$archive" "$url"; then
+            rm -f "$archive"
+            echo "Failed to download $url" >&2
+            return 1
+        fi
+    fi
+    if [ ! -s "$archive" ]; then
+        echo "Downloaded archive is missing or empty: $archive" >&2
+        return 1
     fi
     printf '%s\n' "$archive"
 }
