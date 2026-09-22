@@ -227,13 +227,37 @@ EOF
 # functions in this script, this has not been validated by a successful CI
 # run yet and is the most likely piece to need iteration.
 build_mariadb_server() {
-    local archive source build mariadbd client_cli
+    local archive source host_build host_import build mariadbd client_cli
     echo "[deps] MariaDB Server 10.11.9 (mariadbd)"
     archive="$(download https://archive.mariadb.org/mariadb-10.11.9/source/mariadb-10.11.9.tar.gz mariadb-10.11.9.tar.gz)"
     source="$(extract "$archive" mariadb-10.11.9)"
+    host_build="$SOURCE_DIR/mariadb-host-build"
+    host_import="$host_build/import_executables.cmake"
     build="$SOURCE_DIR/mariadb-server-build"
 
     if [ ! -f "$PREFIX/lib/mariadbd" ]; then
+        # MariaDB's Android cross-build cannot execute its generated build
+        # tools. Build those tools natively first and import their locations
+        # into the cross-build through IMPORT_EXECUTABLES.
+        if [ ! -s "$host_import" ]; then
+            cmake -S "$source" -B "$host_build" -G Ninja \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DWITH_SSL=OFF \
+                -DWITH_READLINE=OFF \
+                -DWITH_UNIT_TESTS=OFF \
+                -DWITH_WSREP=OFF \
+                -DWITH_EMBEDDED_SERVER=OFF \
+                -DWITHOUT_TOKUDB=1 -DWITHOUT_ROCKSDB=1 -DWITHOUT_MROONGA=1 \
+                -DWITHOUT_OQGRAPH=1 -DWITHOUT_SPHINX=1 -DWITHOUT_SPIDER=1 \
+                -DWITHOUT_CONNECT=1 -DWITHOUT_COLUMNSTORE=1 -DWITHOUT_S3=1 \
+                -DPLUGIN_COLUMNSTORE=NO
+            cmake --build "$host_build" --target import_executables --parallel "$JOBS"
+        fi
+        test -s "$host_import" || {
+            echo "MariaDB native import file was not generated: $host_import" >&2
+            exit 1
+        }
+
         mkdir -p "$build"
         cmake -S "$source" -B "$build" -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$NDK_ROOT/build/cmake/android.toolchain.cmake" \
@@ -253,6 +277,8 @@ build_mariadb_server() {
             -DWITHOUT_TOKUDB=1 -DWITHOUT_ROCKSDB=1 -DWITHOUT_MROONGA=1 \
             -DWITHOUT_OQGRAPH=1 -DWITHOUT_SPHINX=1 -DWITHOUT_SPIDER=1 \
             -DWITHOUT_CONNECT=1 -DWITHOUT_COLUMNSTORE=1 -DWITHOUT_S3=1 \
+            -DPLUGIN_COLUMNSTORE=NO \
+            -DIMPORT_EXECUTABLES="$host_import" \
             -DWITH_UNIT_TESTS=OFF \
             -DWITH_EMBEDDED_SERVER=OFF \
             -DCMAKE_C_FLAGS="-Wno-error" \
