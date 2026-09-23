@@ -285,6 +285,7 @@ build_mariadb_server() {
                 -DWITHOUT_OQGRAPH=1 -DWITHOUT_SPHINX=1 -DWITHOUT_SPIDER=1 \
                 -DWITHOUT_CONNECT=1 -DWITHOUT_COLUMNSTORE=1 -DWITHOUT_S3=1 \
                 -DPLUGIN_COLUMNSTORE=NO \
+                -DPLUGIN_DAEMON_EXAMPLE=NO \
                 -DCONNECT_WITH_JDBC=OFF -DCONNECT_WITH_MONGO=OFF
             env -u CC -u CXX -u AR -u RANLIB -u STRIP -u CFLAGS -u CXXFLAGS -u LDFLAGS \
                 cmake --build "$host_build" --target import_executables --parallel "$JOBS"
@@ -319,6 +320,7 @@ build_mariadb_server() {
             -DWITHOUT_OQGRAPH=1 -DWITHOUT_SPHINX=1 -DWITHOUT_SPIDER=1 \
             -DWITHOUT_CONNECT=1 -DWITHOUT_COLUMNSTORE=1 -DWITHOUT_S3=1 \
             -DPLUGIN_COLUMNSTORE=NO \
+            -DPLUGIN_DAEMON_EXAMPLE=NO \
             -DCONNECT_WITH_JDBC=OFF -DCONNECT_WITH_MONGO=OFF \
             -DIMPORT_EXECUTABLES="$host_import" \
             -DWITH_UNIT_TESTS=OFF \
