@@ -170,11 +170,12 @@ build_boost() {
     fi
 }
 
-build_mariadb() {
-    local source maria_cmake remaining
-    echo "[deps] MariaDB Connector/C 3.3.8"
-    source="$(extract "$(download https://archive.mariadb.org/connector-c-3.3.8/mariadb-connector-c-3.3.8-src.tar.gz mariadb-connector-c-3.3.8-src.tar.gz)" mariadb-connector-c-3.3.8-src)"
-    echo "[deps] MariaDB source ushort tokens before patch:"
+# Bionic does not provide the BSD-style ushort/uint/ulong typedefs that
+# glibc exposes by default; MariaDB source relies on ushort in several
+# places, so rewrite it to the portable unsigned short everywhere.
+patch_ushort_tokens() {
+    local source="$1" source_file remaining
+    echo "[deps] ushort tokens before patch ($source):"
     while IFS= read -r -d '' source_file; do
         if grep -qP '\bushort\b' "$source_file"; then
             grep -nP '\bushort\b' "$source_file"
@@ -184,11 +185,18 @@ build_mariadb() {
 
     remaining="$(grep -RInP --include='*.c' --include='*.h' '\bushort\b' "$source" || true)"
     if [ -n "$remaining" ]; then
-        echo "MariaDB ushort token patch verification failed; remaining occurrences:" >&2
+        echo "ushort token patch verification failed; remaining occurrences:" >&2
         printf '%s\n' "$remaining" >&2
         exit 1
     fi
-    echo "[deps] MariaDB source ushort token patch verified: zero remaining occurrences"
+    echo "[deps] ushort token patch verified: zero remaining occurrences ($source)"
+}
+
+build_mariadb() {
+    local source maria_cmake
+    echo "[deps] MariaDB Connector/C 3.3.8"
+    source="$(extract "$(download https://archive.mariadb.org/connector-c-3.3.8/mariadb-connector-c-3.3.8-src.tar.gz mariadb-connector-c-3.3.8-src.tar.gz)" mariadb-connector-c-3.3.8-src)"
+    patch_ushort_tokens "$source"
     maria_cmake="$source/CMakeLists.txt"
     grep -q 'SET(WARNING_AS_ERROR "-Werror")' "$maria_cmake"
     sed -i 's/IF ((NOT WIN32) AND (CMAKE_C_COMPILER_ID MATCHES "Clang" OR CMAKE_C_COMPILER_ID MATCHES "GNU"))/IF ((NOT WIN32) AND (NOT ANDROID) AND (CMAKE_C_COMPILER_ID MATCHES "Clang" OR CMAKE_C_COMPILER_ID MATCHES "GNU"))/' "$maria_cmake"
@@ -231,6 +239,7 @@ build_mariadb_server() {
     echo "[deps] MariaDB Server 10.11.9 (mariadbd)"
     archive="$(download https://archive.mariadb.org/mariadb-10.11.9/source/mariadb-10.11.9.tar.gz mariadb-10.11.9.tar.gz)"
     source="$(extract "$archive" mariadb-10.11.9)"
+    patch_ushort_tokens "$source"
     host_build="$SOURCE_DIR/mariadb-host-build"
     host_import="$host_build/import_executables.cmake"
     build="$SOURCE_DIR/mariadb-server-build"
