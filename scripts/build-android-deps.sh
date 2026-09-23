@@ -295,7 +295,7 @@ build_mariadb_server() {
             -DIMPORT_EXECUTABLES="$host_import" \
             -DWITH_UNIT_TESTS=OFF \
             -DWITH_EMBEDDED_SERVER=OFF \
-            -DCMAKE_C_FLAGS="-Wno-error" \
+            -DCMAKE_C_FLAGS="-Wno-error -Wno-error=implicit-function-declaration" \
             -DCMAKE_CXX_FLAGS="-Wno-error -D__ANDROID__"
         cmake --build "$build" --parallel "$JOBS"
         cmake --install "$build"
