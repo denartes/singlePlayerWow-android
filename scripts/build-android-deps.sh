@@ -292,6 +292,8 @@ build_mariadb_server() {
             -DWITH_ZLIB=system -DZLIB_ROOT="$PREFIX" \
             -DWITH_PCRE=bundled \
             -DWITH_READLINE=OFF \
+            -DREADLINE_INCLUDE_DIR="$PREFIX/include" \
+            -DREADLINE_LIBRARY="$PREFIX/lib/libreadline.so" \
             -DCURSES_INCLUDE_PATH="$PREFIX/include/ncursesw" \
             -DCURSES_INCLUDE_DIR="$PREFIX/include/ncursesw" \
             -DCURSES_LIBRARY="$PREFIX/lib/libncurses.so" \
