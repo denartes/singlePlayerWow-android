@@ -235,7 +235,7 @@ EOF
 # functions in this script, this has not been validated by a successful CI
 # run yet and is the most likely piece to need iteration.
 build_mariadb_server() {
-    local archive source host_build host_import build mariadbd client_cli histlib
+    local archive source host_build host_import build mariadbd client_cli histlib pcre_cmake
     echo "[deps] MariaDB Server 10.11.9 (mariadbd)"
     archive="$(download https://archive.mariadb.org/mariadb-10.11.9/source/mariadb-10.11.9.tar.gz mariadb-10.11.9.tar.gz)"
     source="$(extract "$archive" mariadb-10.11.9)"
@@ -246,6 +246,13 @@ build_mariadb_server() {
     histlib="$source/extra/readline/histlib.h"
     if grep -qF 'extern char *strchr ();' "$histlib"; then
         sed -i 's/extern char \*strchr ();/#include <string.h> \/* Android NDK declares strchr() here *\//' "$histlib"
+    fi
+    # The bundled PCRE2 ExternalProject_Add() only forwards CMAKE_C_COMPILER
+    # and build flags, never CMAKE_TOOLCHAIN_FILE/ANDROID_*, so it silently
+    # cross-compiles for the host instead of Android unless patched.
+    pcre_cmake="$source/cmake/pcre.cmake"
+    if ! grep -q 'CMAKE_TOOLCHAIN_FILE=\${CMAKE_TOOLCHAIN_FILE}' "$pcre_cmake"; then
+        sed -i 's/"-DPCRE2_BUILD_TESTS=OFF"/"-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}"\n      "-DANDROID_ABI=${ANDROID_ABI}"\n      "-DANDROID_PLATFORM=${ANDROID_PLATFORM}"\n      "-DPCRE2_BUILD_TESTS=OFF"/' "$pcre_cmake"
     fi
     host_build="$SOURCE_DIR/mariadb-host-build"
     host_import="$host_build/import_executables.cmake"
@@ -288,6 +295,9 @@ build_mariadb_server() {
         }
 
         mkdir -p "$build"
+        # Clear any host-arch PCRE2 build left over from a cached source dir
+        # predating the pcre.cmake Android toolchain forwarding patch above.
+        rm -rf "$build/extra/pcre2"
         cmake -S "$source" -B "$build" -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$NDK_ROOT/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI="$ABI" -DANDROID_PLATFORM="android-$API" \
