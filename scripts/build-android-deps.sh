@@ -240,10 +240,17 @@ build_mariadb_server() {
         # tools. Build those tools natively first and import their locations
         # into the cross-build through IMPORT_EXECUTABLES.
         if [ ! -s "$host_import" ]; then
+            # MYSQL_CHECK_READLINE() always calls the REQUIRED FIND_CURSES(),
+            # even with WITH_READLINE=OFF, so the system curses lib must be
+            # locatable explicitly rather than relying on apt alone.
+            host_curses_library="$(find /usr/lib -name 'libncursesw.so*' -o -name 'libncurses.so*' 2>/dev/null | head -n1)"
+            test -n "$host_curses_library" || { echo "System libncurses not found; is libncurses-dev installed?" >&2; exit 1; }
             cmake -S "$source" -B "$host_build" -G Ninja \
                 -DCMAKE_BUILD_TYPE=Release \
                 -DWITH_SSL=OFF \
                 -DWITH_READLINE=OFF \
+                -DCURSES_LIBRARY="$host_curses_library" \
+                -DCURSES_INCLUDE_PATH=/usr/include \
                 -DWITH_UNIT_TESTS=OFF \
                 -DWITH_WSREP=OFF \
                 -DWITH_EMBEDDED_SERVER=OFF \
