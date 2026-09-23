@@ -295,10 +295,10 @@ build_mariadb_server() {
             exit 1
         }
 
+        # Full wipe: Ninja/CMake can otherwise retain already-generated
+        # client targets from a cached source dir across script changes.
+        rm -rf "$build" "$PREFIX/server"
         mkdir -p "$build"
-        # Clear any host-arch PCRE2 build left over from a cached source dir
-        # predating the pcre.cmake Android toolchain forwarding patch above.
-        rm -rf "$build/extra/pcre2"
         cmake -S "$source" -B "$build" -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$NDK_ROOT/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI="$ABI" -DANDROID_PLATFORM="android-$API" \
@@ -316,6 +316,9 @@ build_mariadb_server() {
             -DCURSES_INCLUDE_DIR="$PREFIX/include/ncursesw" \
             -DCURSES_LIBRARY="$PREFIX/lib/libncurses.so" \
             -DWITH_WSREP=OFF \
+            -DWITHOUT_CLIENT=ON \
+            -DWITH_CLIENT=OFF \
+            -DWITHOUT_TESTS=ON \
             -DWITHOUT_TOKUDB=1 -DWITHOUT_ROCKSDB=1 -DWITHOUT_MROONGA=1 \
             -DWITHOUT_OQGRAPH=1 -DWITHOUT_SPHINX=1 -DWITHOUT_SPIDER=1 \
             -DWITHOUT_CONNECT=1 -DWITHOUT_COLUMNSTORE=1 -DWITHOUT_S3=1 \
