@@ -181,9 +181,9 @@ patch_ushort_tokens() {
             grep -nP '\bushort\b' "$source_file"
             perl -pi -e 's/\bushort\b/unsigned short/g' "$source_file"
         fi
-    done < <(find "$source" -type f \( -name '*.c' -o -name '*.h' \) -print0)
+    done < <(find "$source" -type f \( -name '*.c' -o -name '*.h' -o -name '*.cc' -o -name '*.cpp' -o -name '*.hpp' \) -print0)
 
-    remaining="$(grep -RInP --include='*.c' --include='*.h' '\bushort\b' "$source" || true)"
+    remaining="$(grep -RInP --include='*.c' --include='*.h' --include='*.cc' --include='*.cpp' --include='*.hpp' '\bushort\b' "$source" || true)"
     if [ -n "$remaining" ]; then
         echo "ushort token patch verification failed; remaining occurrences:" >&2
         printf '%s\n' "$remaining" >&2
