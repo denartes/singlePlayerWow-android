@@ -245,7 +245,11 @@ build_mariadb_server() {
             # locatable explicitly rather than relying on apt alone.
             host_curses_library="$(find /usr/lib -name 'libncursesw.so*' -o -name 'libncurses.so*' 2>/dev/null | head -n1)"
             test -n "$host_curses_library" || { echo "System libncurses not found; is libncurses-dev installed?" >&2; exit 1; }
-            cmake -S "$source" -B "$host_build" -G Ninja \
+            # This must build with the host toolchain, not the Android NDK
+            # clang/flags exported above, or the generated code-gen tools
+            # (e.g. uca-dump) end up ARM64 and unrunnable on the CI runner.
+            env -u CC -u CXX -u AR -u RANLIB -u STRIP -u CFLAGS -u CXXFLAGS -u LDFLAGS \
+                cmake -S "$source" -B "$host_build" -G Ninja \
                 -DCMAKE_BUILD_TYPE=Release \
                 -DWITH_SSL=OFF \
                 -DWITH_READLINE=OFF \
@@ -258,7 +262,8 @@ build_mariadb_server() {
                 -DWITHOUT_OQGRAPH=1 -DWITHOUT_SPHINX=1 -DWITHOUT_SPIDER=1 \
                 -DWITHOUT_CONNECT=1 -DWITHOUT_COLUMNSTORE=1 -DWITHOUT_S3=1 \
                 -DPLUGIN_COLUMNSTORE=NO
-            cmake --build "$host_build" --target import_executables --parallel "$JOBS"
+            env -u CC -u CXX -u AR -u RANLIB -u STRIP -u CFLAGS -u CXXFLAGS -u LDFLAGS \
+                cmake --build "$host_build" --target import_executables --parallel "$JOBS"
         fi
         test -s "$host_import" || {
             echo "MariaDB native import file was not generated: $host_import" >&2
