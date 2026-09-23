@@ -235,11 +235,18 @@ EOF
 # functions in this script, this has not been validated by a successful CI
 # run yet and is the most likely piece to need iteration.
 build_mariadb_server() {
-    local archive source host_build host_import build mariadbd client_cli
+    local archive source host_build host_import build mariadbd client_cli histlib
     echo "[deps] MariaDB Server 10.11.9 (mariadbd)"
     archive="$(download https://archive.mariadb.org/mariadb-10.11.9/source/mariadb-10.11.9.tar.gz mariadb-10.11.9.tar.gz)"
     source="$(extract "$archive" mariadb-10.11.9)"
     patch_ushort_tokens "$source"
+    # Bundled extra/readline's K&R-style "extern char *strchr ();" conflicts
+    # with Bionic's __overloadable fortified strchr() declaration; this is a
+    # hard error, not a warning, so it must be patched rather than silenced.
+    histlib="$source/extra/readline/histlib.h"
+    if grep -qF 'extern char *strchr ();' "$histlib"; then
+        sed -i 's/extern char \*strchr ();/#include <string.h> \/* Android NDK declares strchr() here *\//' "$histlib"
+    fi
     host_build="$SOURCE_DIR/mariadb-host-build"
     host_import="$host_build/import_executables.cmake"
     build="$SOURCE_DIR/mariadb-server-build"
