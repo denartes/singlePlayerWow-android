@@ -114,7 +114,11 @@ build_ncurses() {
     source="$(extract "$archive" ncurses-6.5)"
     if [ ! -f "$PREFIX/lib/libncursesw.so" ]; then
         pushd "$source" >/dev/null
-        ./configure --host="$TARGET" --prefix="$PREFIX" --with-shared --without-debug --without-ada --without-tests --enable-widec --disable-stripping
+        # --enable-overwrite installs curses.h/term.h flat under $PREFIX/include
+        # instead of namespaced under include/ncursesw/; several legacy
+        # sources (e.g. MariaDB's client/mysql.cc) use the bare
+        # "#include <curses.h>" form and won't find the namespaced headers.
+        ./configure --host="$TARGET" --prefix="$PREFIX" --with-shared --without-debug --without-ada --without-tests --enable-widec --enable-overwrite --disable-stripping
         make -j"$JOBS"
         make install
         popd >/dev/null
@@ -235,7 +239,7 @@ EOF
 # functions in this script, this has not been validated by a successful CI
 # run yet and is the most likely piece to need iteration.
 build_mariadb_server() {
-    local archive source host_build host_import build mariadbd client_cli histlib pcre_cmake top_cmake matches
+    local archive source host_build host_import build mariadbd client_cli histlib pcre_cmake client_cmake tpool_generic
     echo "[deps] MariaDB Server 10.11.9 (mariadbd)"
     archive="$(download https://archive.mariadb.org/mariadb-10.11.9/source/mariadb-10.11.9.tar.gz mariadb-10.11.9.tar.gz)"
     source="$(extract "$archive" mariadb-10.11.9)"
@@ -254,15 +258,31 @@ build_mariadb_server() {
     if ! grep -q 'CMAKE_TOOLCHAIN_FILE=\${CMAKE_TOOLCHAIN_FILE}' "$pcre_cmake"; then
         sed -i 's/"-DPCRE2_BUILD_TESTS=OFF"/"-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}"\n      "-DANDROID_ABI=${ANDROID_ABI}"\n      "-DANDROID_PLATFORM=${ANDROID_PLATFORM}"\n      "-DPCRE2_BUILD_TESTS=OFF"/' "$pcre_cmake"
     fi
-    # MariaDB 10.11 has no WITHOUT_CLIENT/WITH_CLIENT option: client/ is added
-    # unconditionally and needs curses.h, which isn't visible in this
-    # cross-build. Skip the whole subdirectory entirely when cross-compiling;
-    # only mariadbd (from sql/) is needed, none of the client/ tools are used.
-    top_cmake="$source/CMakeLists.txt"
-    if ! grep -q 'bygdok-android-skip' "$top_cmake"; then
-        matches="$(grep -cE '^[[:space:]]*ADD_SUBDIRECTORY\(client\)[[:space:]]*$' "$top_cmake")"
-        test "$matches" -eq 1 || { echo "Expected exactly one top-level ADD_SUBDIRECTORY(client) in MariaDB CMakeLists.txt, found $matches" >&2; exit 1; }
-        perl -0777 -pi -e 's/^[ \t]*ADD_SUBDIRECTORY\(client\)[ \t]*$/IF(NOT ANDROID)\n  ADD_SUBDIRECTORY(client) # bygdok-android-skip\nENDIF()/m' "$top_cmake"
+    # MariaDB has no WITHOUT_CLIENT option; client/mysql.cc's bare
+    # "#include <curses.h>" is fixed by ncurses' --enable-overwrite above.
+    # Only mariadb-test (mysqltest.cc) needs to be dropped, matching Termux's
+    # termux-packages/mariadb client-CMakeLists.txt.patch: it links pcre2-8
+    # directly (bypassing our toolchain-forwarding patch) and isn't needed
+    # by this runtime. Keeping the "mariadb" CLI itself working is required
+    # for RealmForegroundService's on-device acore user/database bootstrap.
+    client_cmake="$source/client/CMakeLists.txt"
+    if ! grep -q 'bygdok-android-skip' "$client_cmake"; then
+        grep -q 'MYSQL_ADD_EXECUTABLE(mariadb-test mysqltest.cc' "$client_cmake" || {
+            echo "Expected mariadb-test target definition not found in client/CMakeLists.txt" >&2
+            exit 1
+        }
+        perl -0777 -pi -e 's/MYSQL_ADD_EXECUTABLE\(mariadb-test mysqltest\.cc.*?SET_TARGET_PROPERTIES\(mariadb-test PROPERTIES\n?\s*ENABLE_EXPORTS TRUE\)\n*/# bygdok-android-skip: mariadb-test dropped (needs test-only pcre2 symbols)\n/s' "$client_cmake"
+        sed -i 's/FOREACH(t mariadb mariadb-test mariadb-check/FOREACH(t mariadb mariadb-check/' "$client_cmake"
+    fi
+    # tpool's Linux native AIO backend (io_uring/libaio) isn't available on
+    # Android; same guard as Termux's tpool-tpool_generic.cc.patch.
+    tpool_generic="$source/tpool/tpool_generic.cc"
+    if ! grep -q '__linux__ && !defined(__ANDROID__)' "$tpool_generic"; then
+        grep -q '#elif defined __linux__' "$tpool_generic" || {
+            echo "Expected tpool __linux__ AIO branch not found in tpool_generic.cc" >&2
+            exit 1
+        }
+        sed -i 's/#elif defined __linux__/#elif defined __linux__ \&\& !defined(__ANDROID__)/' "$tpool_generic"
     fi
     host_build="$SOURCE_DIR/mariadb-host-build"
     host_import="$host_build/import_executables.cmake"
@@ -322,8 +342,8 @@ build_mariadb_server() {
             -DWITH_READLINE=OFF \
             -DREADLINE_INCLUDE_DIR="$PREFIX/include" \
             -DREADLINE_LIBRARY="$PREFIX/lib/libreadline.so" \
-            -DCURSES_INCLUDE_PATH="$PREFIX/include/ncursesw" \
-            -DCURSES_INCLUDE_DIR="$PREFIX/include/ncursesw" \
+            -DCURSES_INCLUDE_PATH="$PREFIX/include" \
+            -DCURSES_INCLUDE_DIR="$PREFIX/include" \
             -DCURSES_LIBRARY="$PREFIX/lib/libncurses.so" \
             -DWITH_WSREP=OFF \
             -DWITHOUT_TOKUDB=1 -DWITHOUT_ROCKSDB=1 -DWITHOUT_MROONGA=1 \
