@@ -59,14 +59,28 @@ android {
 val nativeRuntimeDir = file("../../runtime/build/bygdok-runtime-arm64")
 val jniLibsDir = file("src/main/jniLibs/arm64-v8a")
 val assetsSqlDir = file("src/main/assets/sql")
+val assetsMariaDbShareDir = file("src/main/assets/mariadb-share")
 
 tasks.register("embedNativeRuntime") {
+    if (nativeRuntimeDir.exists()) {
+        inputs.dir(nativeRuntimeDir)
+    }
+    outputs.dir(jniLibsDir)
+    outputs.dir(assetsSqlDir)
+    outputs.dir(assetsMariaDbShareDir)
+
     doLast {
         if (!nativeRuntimeDir.exists()) {
+            if (System.getenv("GITHUB_ACTIONS") != null) {
+                error("[embedNativeRuntime] Runtime artifact missing at $nativeRuntimeDir")
+            }
             logger.lifecycle("[embedNativeRuntime] No runtime artifact at $nativeRuntimeDir; building dashboard-only APK.")
             return@doLast
         }
 
+        jniLibsDir.deleteRecursively()
+        assetsSqlDir.deleteRecursively()
+        assetsMariaDbShareDir.deleteRecursively()
         jniLibsDir.mkdirs()
 
         val executableRenames = mapOf(
@@ -93,6 +107,11 @@ tasks.register("embedNativeRuntime") {
         val sqlDir = File(nativeRuntimeDir, "sql")
         if (sqlDir.exists()) {
             sqlDir.copyRecursively(assetsSqlDir, overwrite = true)
+        }
+
+        val mariaDbShareDir = File(nativeRuntimeDir, "share")
+        if (mariaDbShareDir.exists()) {
+            mariaDbShareDir.copyRecursively(assetsMariaDbShareDir, overwrite = true)
         }
 
         logger.lifecycle("[embedNativeRuntime] Embedded native runtime from $nativeRuntimeDir")

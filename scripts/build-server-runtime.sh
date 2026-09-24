@@ -13,8 +13,10 @@ ANDROID_API="${ANDROID_API:-30}"
 : "${ANDROID_NDK_ROOT:?ANDROID_NDK_ROOT must point to Android NDK r29}"
 ANDROID_MYSQL_ROOT="${ANDROID_MYSQL_ROOT:-${BYGDOK_ANDROID_MYSQL_ROOT:-}}"
 ANDROID_RUNTIME_LIB_DIR="${ANDROID_RUNTIME_LIB_DIR:-${BYGDOK_ANDROID_RUNTIME_LIB_DIR:-}}"
+MARIADB_RUNTIME_DIR="${MARIADB_RUNTIME_DIR:-${BYGDOK_MARIADB_RUNTIME_DIR:-}}"
 : "${ANDROID_MYSQL_ROOT:?BYGDOK_ANDROID_MYSQL_ROOT must point to an Android ARM64 MariaDB/MySQL client toolchain}"
 : "${ANDROID_RUNTIME_LIB_DIR:?BYGDOK_ANDROID_RUNTIME_LIB_DIR must contain Android ARM64 runtime libraries}"
+: "${MARIADB_RUNTIME_DIR:?BYGDOK_MARIADB_RUNTIME_DIR must point to the validated MariaDB runtime artifact}"
 
 TOOLCHAIN_DIR="${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64"
 ANDROID_CLANG="${TOOLCHAIN_DIR}/bin/aarch64-linux-android${ANDROID_API}-clang"
@@ -142,16 +144,14 @@ cmake -S "$CORE_DIR" -B "$BUILD_DIR" -G Ninja \
 cmake --build "$BUILD_DIR" --parallel
 cmake --install "$BUILD_DIR"
 
-mkdir -p "$OUTPUT_DIR/bin" "$OUTPUT_DIR/lib" "$OUTPUT_DIR/sql"
+mkdir -p "$OUTPUT_DIR/bin" "$OUTPUT_DIR/lib" "$OUTPUT_DIR/sql" "$OUTPUT_DIR/share"
 cp "$INSTALL_DIR/bin/authserver" "$OUTPUT_DIR/bin/"
 cp "$INSTALL_DIR/bin/worldserver" "$OUTPUT_DIR/bin/"
 
-# mariadbd (and its optional CLI client) make the runtime artifact
-# self-sufficient: no external/Termux-hosted database is required.
-cp "$ANDROID_RUNTIME_LIB_DIR/mariadbd" "$OUTPUT_DIR/bin/"
-if [ -f "$ANDROID_RUNTIME_LIB_DIR/mariadb_client" ]; then
-    cp "$ANDROID_RUNTIME_LIB_DIR/mariadb_client" "$OUTPUT_DIR/bin/"
-fi
+cp "$MARIADB_RUNTIME_DIR/bin/mariadbd" "$OUTPUT_DIR/bin/"
+cp "$MARIADB_RUNTIME_DIR/bin/mariadb" "$OUTPUT_DIR/bin/mariadb_client"
+cp -a "$MARIADB_RUNTIME_DIR/lib/." "$OUTPUT_DIR/lib/"
+cp -a "$MARIADB_RUNTIME_DIR/share/." "$OUTPUT_DIR/share/"
 
 # Mirror the SQL update tree so the on-device AzerothCore updater can find
 # base/update SQL via SourceDirectory, matching how the source checkout is
@@ -176,7 +176,7 @@ for binary in "$OUTPUT_DIR/bin/authserver" "$OUTPUT_DIR/bin/worldserver" "$OUTPU
         case "$library" in
             libc.so|libdl.so|liblog.so|libm.so|libandroid.so|libc++abi.so) continue ;;
         esac
-        found="$(find "$ANDROID_RUNTIME_LIB_DIR" "$TOOLCHAIN_DIR/sysroot/usr/lib/aarch64-linux-android" -name "$library" \( -type f -o -type l \) -print -quit)"
+        found="$(find "$MARIADB_RUNTIME_DIR/lib" "$ANDROID_RUNTIME_LIB_DIR" "$TOOLCHAIN_DIR/sysroot/usr/lib/aarch64-linux-android" -name "$library" \( -type f -o -type l \) -print -quit)"
         test -n "$found" || { echo "Required runtime library not found: $library" >&2; exit 1; }
         cp -nL "$found" "$OUTPUT_DIR/lib/"
     done < <("$ANDROID_READELF" -d "$binary" | sed -n 's/.*Shared library: \[\([^]]*\)\].*/\1/p' | sort -u)

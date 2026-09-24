@@ -25,6 +25,7 @@ class RealmConfigInstaller(private val context: Context, private val paths: Real
                 ?: line
         }
         copyAssetTreeIfPresent("sql", paths.sqlDir)
+        copyAssetTreeIfPresent("mariadb-share", File(paths.mariadbBaseDir, "share"))
     }
 
     private fun installConfig(assetName: String, destination: File, patchLine: (String) -> String) {

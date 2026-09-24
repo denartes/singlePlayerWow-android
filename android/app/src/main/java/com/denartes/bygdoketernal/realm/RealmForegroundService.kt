@@ -85,20 +85,19 @@ class RealmForegroundService : Service() {
         RealmRuntime.updateState { it.copy(database = ComponentStatus.STARTING) }
         updateNotification("Starting database...")
 
-        val basedir = File(paths.root, "mariadb-basedir").apply { mkdirs() }
-        val firstRun = !File(paths.dataDir, "mysql").isDirectory
+        val basedir = paths.mariadbBaseDir
+        val bootstrapMarker = File(paths.dataDir, ".bootstrap-complete")
+        val firstRun = !bootstrapMarker.isFile
         if (firstRun) {
             RealmRuntime.appendLog("[mariadbd] Initializing data directory")
-            runBlockingProcess(
-                listOf(
-                    nativeBinary("libmariadbd.so"),
-                    "--no-defaults",
-                    "--datadir=${paths.dataDir.absolutePath}",
-                    "--basedir=${basedir.absolutePath}",
-                    "--initialize-insecure"
-                ),
-                logPrefix = "mariadbd-init"
-            )
+            try {
+                initializeDatabase(basedir)
+                bootstrapMarker.writeText("complete\n")
+            } catch (error: Throwable) {
+                File(paths.dataDir, "mysql").deleteRecursively()
+                bootstrapMarker.delete()
+                throw error
+            }
         }
 
         val process = ProcessBuilder(
@@ -126,6 +125,40 @@ class RealmForegroundService : Service() {
         }
 
         RealmRuntime.updateState { it.copy(database = ComponentStatus.RUNNING) }
+    }
+
+    private fun initializeDatabase(basedir: File) {
+        val shareDir = File(basedir, "share")
+        val sqlFiles = listOf(
+            "mysql_system_tables.sql",
+            "mysql_performance_tables.sql",
+            "mysql_system_tables_data.sql",
+            "fill_help_tables.sql",
+            "maria_add_gis_sp_bootstrap.sql",
+            "mysql_sys_schema.sql"
+        )
+        val bootstrapSql = buildString {
+            appendLine("CREATE DATABASE IF NOT EXISTS mysql;")
+            appendLine("USE mysql;")
+            appendLine("SET @auth_root_socket=NULL;")
+            sqlFiles.forEach { name -> appendLine(File(shareDir, name).readText()) }
+        }
+        runBlockingProcess(
+            listOf(
+                nativeBinary("libmariadbd.so"),
+                "--no-defaults",
+                "--bootstrap",
+                "--silent-startup",
+                "--basedir=${basedir.absolutePath}",
+                "--datadir=${paths.dataDir.absolutePath}",
+                "--lc-messages-dir=${shareDir.absolutePath}",
+                "--log-warnings=0",
+                "--max-allowed-packet=8M",
+                "--net-buffer-length=16K"
+            ),
+            logPrefix = "mariadbd-init",
+            standardInput = bootstrapSql
+        )
     }
 
     private fun bootstrapDatabaseSchema() {
@@ -228,12 +261,17 @@ class RealmForegroundService : Service() {
         }
     }
 
-    private fun runBlockingProcess(command: List<String>, logPrefix: String) {
+    private fun runBlockingProcess(command: List<String>, logPrefix: String, standardInput: String? = null) {
         val process = ProcessBuilder(command)
             .directory(paths.root)
             .redirectErrorStream(true)
             .also { it.environment()["LD_LIBRARY_PATH"] = paths.nativeLibraryDir }
             .start()
+        if (standardInput != null) {
+            process.outputStream.bufferedWriter().use { it.write(standardInput) }
+        } else {
+            process.outputStream.close()
+        }
         process.inputStream.bufferedReader().forEachLine { line ->
             RealmRuntime.appendLog("[$logPrefix] $line")
         }

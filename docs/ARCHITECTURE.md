@@ -28,13 +28,13 @@ Persistent realm data
     └── backups
 ```
 
-The Android application is the management and hosting layer. The `runtime/` directory holds the packaged Android-native server runtime (authserver, worldserver, mariadbd, and their `.so` dependencies), built by `scripts/build-server-runtime.sh` in CI. The `android.yml` workflow depends on `server-runtime.yml`, downloads its artifact, and a Gradle task (`embedNativeRuntime` in `android/app/build.gradle.kts`) stages it into `jniLibs/arm64-v8a/` under the `lib*.so` naming convention required for Android to extract executables into a non-writable, executable `nativeLibraryDir`. `RealmForegroundService` launches `libmariadbd.so`, then `libauthserver.so`, then `libworldserver.so` directly from that directory.
+The Android application is the management and hosting layer. `mariadb-runtime.yml` first builds and validates an isolated Android MariaDB artifact using `scripts/build-mariadb-runtime.sh`. `server-runtime.yml` consumes that artifact while packaging authserver, worldserver, MariaDB, and their shared libraries. The Android workflow stages the combined artifact into `jniLibs/arm64-v8a/` under the `lib*.so` naming convention required for executable extraction. `RealmForegroundService` launches `libmariadbd.so`, then `libauthserver.so`, then `libworldserver.so`.
 
 ## Implementation Status
 
 - Native runtime embedding (jniLibs staging, `RealmForegroundService` process orchestration, config/asset patching, dashboard wiring) is implemented but **not yet validated on a physical device** — it has not been run through CI or the S25 test device.
-- The embedded MariaDB server cross-compile (`build_mariadb_server` in `scripts/build-android-deps.sh`) is experimental and highest-risk: it is the least proven part of the toolchain and is expected to need iterative CI-log-driven fixes.
-- MariaDB's `basedir`/error-message-file requirements on-device are unconfirmed; `mariadbd` may need its `share/errmsg.sys` (and related locale files) packaged and referenced explicitly if it fails to start.
+- The embedded MariaDB server cross-compile is isolated in `scripts/build-mariadb-runtime.sh`. Its versioned patches follow the established Termux Android port where applicable, while retaining MariaDB 10.11.9 until a complete build and device bootstrap are validated.
+- MariaDB's generated share files and bootstrap SQL are packaged into the APK and copied under the on-device `basedir`; physical-device startup remains unvalidated.
 - Worldserver's client data (maps/vmaps/mmaps/dbc, ~2 GB) is downloaded on first run from the same URL the existing Termux scripts use (`RealmClientData`); it is not bundled in the APK.
 
 No runtime mechanism is assumed until it is demonstrated in the working ARM64 environment.

@@ -79,6 +79,21 @@ build_zlib() {
     fi
 }
 
+build_pcre2() {
+    local archive source
+    echo "[deps] PCRE2 10.44"
+    archive="$(download https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.44/pcre2-10.44.tar.bz2 pcre2-10.44.tar.bz2)"
+    source="$(extract "$archive" pcre2-10.44)"
+    if [ ! -f "$PREFIX/lib/libpcre2-8.so" ]; then
+        cmake_build "$source" "$SOURCE_DIR/pcre2-build" \
+            -DBUILD_SHARED_LIBS=ON \
+            -DPCRE2_BUILD_PCRE2_8=ON \
+            -DPCRE2_BUILD_PCRE2GREP=OFF \
+            -DPCRE2_BUILD_TESTS=OFF \
+            -DPCRE2_SUPPORT_JIT=OFF
+    fi
+}
+
 build_openssl() {
     local archive source
     echo "[deps] OpenSSL 3.0.15"
@@ -233,147 +248,8 @@ EOF
     chmod +x "$PREFIX/mysql/bin/mysql_config"
 }
 
-# EXPERIMENTAL: cross-compiles the actual MariaDB database server (mariadbd),
-# not just the client library above. This is required for the app to be
-# self-sufficient (no external/Termux-hosted database). Unlike the other
-# functions in this script, this has not been validated by a successful CI
-# run yet and is the most likely piece to need iteration.
-build_mariadb_server() {
-    local archive source host_build host_import build mariadbd client_cli histlib pcre_cmake client_cmake tpool_generic
-    echo "[deps] MariaDB Server 10.11.9 (mariadbd)"
-    archive="$(download https://archive.mariadb.org/mariadb-10.11.9/source/mariadb-10.11.9.tar.gz mariadb-10.11.9.tar.gz)"
-    source="$(extract "$archive" mariadb-10.11.9)"
-    patch_ushort_tokens "$source"
-    # Bundled extra/readline's K&R-style "extern char *strchr ();" conflicts
-    # with Bionic's __overloadable fortified strchr() declaration; this is a
-    # hard error, not a warning, so it must be patched rather than silenced.
-    histlib="$source/extra/readline/histlib.h"
-    if grep -qF 'extern char *strchr ();' "$histlib"; then
-        sed -i 's/extern char \*strchr ();/#include <string.h> \/* Android NDK declares strchr() here *\//' "$histlib"
-    fi
-    # The bundled PCRE2 ExternalProject_Add() only forwards CMAKE_C_COMPILER
-    # and build flags, never CMAKE_TOOLCHAIN_FILE/ANDROID_*, so it silently
-    # cross-compiles for the host instead of Android unless patched.
-    pcre_cmake="$source/cmake/pcre.cmake"
-    if ! grep -q 'CMAKE_TOOLCHAIN_FILE=\${CMAKE_TOOLCHAIN_FILE}' "$pcre_cmake"; then
-        sed -i 's/"-DPCRE2_BUILD_TESTS=OFF"/"-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}"\n      "-DANDROID_ABI=${ANDROID_ABI}"\n      "-DANDROID_PLATFORM=${ANDROID_PLATFORM}"\n      "-DPCRE2_BUILD_TESTS=OFF"/' "$pcre_cmake"
-    fi
-    # MariaDB has no WITHOUT_CLIENT option; client/mysql.cc's bare
-    # "#include <curses.h>" is fixed by ncurses' --enable-overwrite above.
-    # Only mariadb-test (mysqltest.cc) needs to be dropped, matching Termux's
-    # termux-packages/mariadb client-CMakeLists.txt.patch: it links pcre2-8
-    # directly (bypassing our toolchain-forwarding patch) and isn't needed
-    # by this runtime. Keeping the "mariadb" CLI itself working is required
-    # for RealmForegroundService's on-device acore user/database bootstrap.
-    client_cmake="$source/client/CMakeLists.txt"
-    if ! grep -q 'bygdok-android-skip' "$client_cmake"; then
-        grep -q 'MYSQL_ADD_EXECUTABLE(mariadb-test mysqltest.cc' "$client_cmake" || {
-            echo "Expected mariadb-test target definition not found in client/CMakeLists.txt" >&2
-            exit 1
-        }
-        perl -0777 -pi -e 's/MYSQL_ADD_EXECUTABLE\(mariadb-test mysqltest\.cc.*?SET_TARGET_PROPERTIES\(mariadb-test PROPERTIES\n?\s*ENABLE_EXPORTS TRUE\)\n*/# bygdok-android-skip: mariadb-test dropped (needs test-only pcre2 symbols)\n/s' "$client_cmake"
-        sed -i 's/FOREACH(t mariadb mariadb-test mariadb-check/FOREACH(t mariadb mariadb-check/' "$client_cmake"
-    fi
-    # tpool's Linux native AIO backend (io_uring/libaio) isn't available on
-    # Android; same guard as Termux's tpool-tpool_generic.cc.patch.
-    tpool_generic="$source/tpool/tpool_generic.cc"
-    if ! grep -q '__linux__) && !defined(__ANDROID__)' "$tpool_generic"; then
-        grep -q '#elif defined(__linux__)' "$tpool_generic" || {
-            echo "Expected tpool __linux__ AIO branch not found in tpool_generic.cc" >&2
-            exit 1
-        }
-        sed -i 's/#elif defined(__linux__)/#elif defined(__linux__) \&\& !defined(__ANDROID__)/' "$tpool_generic"
-    fi
-    host_build="$SOURCE_DIR/mariadb-host-build"
-    host_import="$host_build/import_executables.cmake"
-    build="$SOURCE_DIR/mariadb-server-build"
-
-    if [ ! -f "$PREFIX/lib/mariadbd" ]; then
-        # MariaDB's Android cross-build cannot execute its generated build
-        # tools. Build those tools natively first and import their locations
-        # into the cross-build through IMPORT_EXECUTABLES.
-        if [ ! -s "$host_import" ]; then
-            # MYSQL_CHECK_READLINE() always calls the REQUIRED FIND_CURSES(),
-            # even with WITH_READLINE=OFF, so the system curses lib must be
-            # locatable explicitly rather than relying on apt alone.
-            host_curses_library="$(find /usr/lib -name 'libncursesw.so*' -o -name 'libncurses.so*' 2>/dev/null | head -n1)"
-            test -n "$host_curses_library" || { echo "System libncurses not found; is libncurses-dev installed?" >&2; exit 1; }
-            # This must build with the host toolchain, not the Android NDK
-            # clang/flags exported above, or the generated code-gen tools
-            # (e.g. uca-dump) end up ARM64 and unrunnable on the CI runner.
-            env -u CC -u CXX -u AR -u RANLIB -u STRIP -u CFLAGS -u CXXFLAGS -u LDFLAGS \
-                cmake -S "$source" -B "$host_build" -G Ninja \
-                -DCMAKE_BUILD_TYPE=Release \
-                -DWITH_SSL=OFF \
-                -DWITH_READLINE=OFF \
-                -DCURSES_LIBRARY="$host_curses_library" \
-                -DCURSES_INCLUDE_PATH=/usr/include \
-                -DWITH_UNIT_TESTS=OFF \
-                -DWITH_WSREP=OFF \
-                -DWITH_EMBEDDED_SERVER=OFF \
-                -DWITHOUT_TOKUDB=1 -DWITHOUT_ROCKSDB=1 -DWITHOUT_MROONGA=1 \
-                -DWITHOUT_OQGRAPH=1 -DWITHOUT_SPHINX=1 -DWITHOUT_SPIDER=1 \
-                -DWITHOUT_CONNECT=1 -DWITHOUT_COLUMNSTORE=1 -DWITHOUT_S3=1 \
-                -DPLUGIN_COLUMNSTORE=NO \
-                -DPLUGIN_DAEMON_EXAMPLE=NO \
-                -DCONNECT_WITH_JDBC=OFF -DCONNECT_WITH_MONGO=OFF
-            env -u CC -u CXX -u AR -u RANLIB -u STRIP -u CFLAGS -u CXXFLAGS -u LDFLAGS \
-                cmake --build "$host_build" --target import_executables --parallel "$JOBS"
-        fi
-        test -s "$host_import" || {
-            echo "MariaDB native import file was not generated: $host_import" >&2
-            exit 1
-        }
-
-        # Full wipe: Ninja/CMake can otherwise retain already-generated
-        # client targets from a cached source dir across script changes.
-        rm -rf "$build" "$PREFIX/server"
-        mkdir -p "$build"
-        cmake -S "$source" -B "$build" -G Ninja \
-            -DCMAKE_TOOLCHAIN_FILE="$NDK_ROOT/build/cmake/android.toolchain.cmake" \
-            -DANDROID_ABI="$ABI" -DANDROID_PLATFORM="android-$API" \
-            -DCMAKE_INSTALL_PREFIX="$PREFIX/server" \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-            -DCMAKE_FIND_ROOT_PATH="$PREFIX" \
-            -DWITH_SSL="$PREFIX" -DOPENSSL_ROOT_DIR="$PREFIX" \
-            -DWITH_ZLIB=system -DZLIB_ROOT="$PREFIX" \
-            -DWITH_PCRE=bundled \
-            -DWITH_READLINE=OFF \
-            -DREADLINE_INCLUDE_DIR="$PREFIX/include" \
-            -DREADLINE_LIBRARY="$PREFIX/lib/libreadline.so" \
-            -DCURSES_INCLUDE_PATH="$PREFIX/include" \
-            -DCURSES_INCLUDE_DIR="$PREFIX/include" \
-            -DCURSES_LIBRARY="$PREFIX/lib/libncurses.so" \
-            -DWITH_WSREP=OFF \
-            -DWITHOUT_TOKUDB=1 -DWITHOUT_ROCKSDB=1 -DWITHOUT_MROONGA=1 \
-            -DWITHOUT_OQGRAPH=1 -DWITHOUT_SPHINX=1 -DWITHOUT_SPIDER=1 \
-            -DWITHOUT_CONNECT=1 -DWITHOUT_COLUMNSTORE=1 -DWITHOUT_S3=1 \
-            -DPLUGIN_COLUMNSTORE=NO \
-            -DPLUGIN_DAEMON_EXAMPLE=NO \
-            -DCONNECT_WITH_JDBC=OFF -DCONNECT_WITH_MONGO=OFF \
-            -DIMPORT_EXECUTABLES="$host_import" \
-            -DWITH_UNIT_TESTS=OFF \
-            -DWITH_EMBEDDED_SERVER=OFF \
-            -DCMAKE_C_FLAGS="-Wno-error -Wno-error=implicit-function-declaration" \
-            -DCMAKE_CXX_FLAGS="-Wno-error -D__ANDROID__"
-        cmake --build "$build" --parallel "$JOBS"
-        cmake --install "$build"
-    fi
-
-    mariadbd="$(find "$PREFIX/server" -type f \( -name mariadbd -o -name mysqld \) -print -quit)"
-    test -n "$mariadbd" || { echo "MariaDB server build did not produce mariadbd/mysqld" >&2; exit 1; }
-    cp -f "$mariadbd" "$PREFIX/lib/mariadbd"
-    chmod +x "$PREFIX/lib/mariadbd"
-
-    client_cli="$(find "$PREFIX/server" -type f \( -name mariadb -o -name mysql \) -print -quit)"
-    if [ -n "$client_cli" ]; then
-        cp -f "$client_cli" "$PREFIX/lib/mariadb_client"
-        chmod +x "$PREFIX/lib/mariadb_client"
-    fi
-}
-
 build_zlib
+build_pcre2
 build_openssl
 build_xz
 build_ncurses
@@ -381,7 +257,6 @@ build_readline
 build_bzip2
 build_boost
 build_mariadb
-build_mariadb_server
 
 cp -f "$TOOLCHAIN/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so" "$PREFIX/lib/"
 cp -f "$TOOLCHAIN/sysroot/usr/lib/aarch64-linux-android/libunwind.so" "$PREFIX/lib/" 2>/dev/null || true
@@ -392,8 +267,9 @@ test -f "$PREFIX/include/mysql.h" || test -f "$PREFIX/include/mariadb/mysql.h"
 test -f "$PREFIX/lib/libmariadb.so"
 test -f "$PREFIX/lib/libssl.so"
 test -f "$PREFIX/lib/libcrypto.so"
+test -f "$PREFIX/lib/libpcre2-8.so"
+test -f "$PREFIX/lib/libpcre2-posix.so"
 test -f "$PREFIX/lib/libreadline.so"
 test -f "$PREFIX/lib/libncurses.so"
 test -e "$PREFIX/lib/libpthread.so"
-test -x "$PREFIX/lib/mariadbd"
 touch "$PREFIX/.build-complete"
