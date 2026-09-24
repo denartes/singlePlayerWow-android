@@ -81,6 +81,10 @@ cmake -S "$source" -B "$build" -G Ninja \
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
     -DCMAKE_FIND_ROOT_PATH="$PREFIX" \
     -DCMAKE_PREFIX_PATH="$PREFIX" \
+    -DCMAKE_LIBRARY_PATH="$PREFIX/lib" \
+    -DCMAKE_EXE_LINKER_FLAGS="-L$PREFIX/lib -Wl,-rpath-link,$PREFIX/lib" \
+    -DCMAKE_MODULE_LINKER_FLAGS="-L$PREFIX/lib -Wl,-rpath-link,$PREFIX/lib" \
+    -DCMAKE_SHARED_LINKER_FLAGS="-L$PREFIX/lib -Wl,-rpath-link,$PREFIX/lib" \
     -DCMAKE_INSTALL_PREFIX="$PREFIX/server" \
     -DIMPORT_EXECUTABLES="$host_import" \
     -DBUILD_CONFIG=mysql_release \
