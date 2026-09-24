@@ -102,6 +102,7 @@ cmake -S "$source" -B "$build" -G Ninja \
     -DCURSES_INCLUDE_PATH="$PREFIX/include" \
     -DCURSES_INCLUDE_DIR="$PREFIX/include" \
     -DCURSES_LIBRARY="$PREFIX/lib/libncurses.so" \
+    -DHAVE_TERM_H=1 \
     -DWITH_WSREP=OFF \
     -DWITH_JEMALLOC=OFF \
     -DWITH_MARIABACKUP=OFF \
