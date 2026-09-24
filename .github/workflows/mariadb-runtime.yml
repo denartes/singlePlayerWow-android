@@ -40,7 +40,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes \
             bison cmake file git make ninja-build patchelf perl pkg-config \
-            libncurses-dev libreadline-dev
+            libncurses-dev libreadline-dev libssl-dev
 
       - name: Cache Android native dependencies
         id: android-deps-cache
