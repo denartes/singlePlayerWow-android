@@ -277,12 +277,12 @@ build_mariadb_server() {
     # tpool's Linux native AIO backend (io_uring/libaio) isn't available on
     # Android; same guard as Termux's tpool-tpool_generic.cc.patch.
     tpool_generic="$source/tpool/tpool_generic.cc"
-    if ! grep -q '__linux__ && !defined(__ANDROID__)' "$tpool_generic"; then
-        grep -q '#elif defined __linux__' "$tpool_generic" || {
+    if ! grep -q '__linux__) && !defined(__ANDROID__)' "$tpool_generic"; then
+        grep -q '#elif defined(__linux__)' "$tpool_generic" || {
             echo "Expected tpool __linux__ AIO branch not found in tpool_generic.cc" >&2
             exit 1
         }
-        sed -i 's/#elif defined __linux__/#elif defined __linux__ \&\& !defined(__ANDROID__)/' "$tpool_generic"
+        sed -i 's/#elif defined(__linux__)/#elif defined(__linux__) \&\& !defined(__ANDROID__)/' "$tpool_generic"
     fi
     host_build="$SOURCE_DIR/mariadb-host-build"
     host_import="$host_build/import_executables.cmake"
