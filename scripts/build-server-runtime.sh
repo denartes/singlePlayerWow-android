@@ -71,8 +71,8 @@ sed -n '/^MODULES=(/,/^)/p' "$REPO_DIR/wowsp_cutoff.sh" \
             if [ "$current_commit" = "$commit" ]; then
                 continue
             fi
-            rm -rf "$CORE_DIR/modules/$name"
         fi
+        rm -rf "$CORE_DIR/modules/$name"
         git clone "$repository" "$CORE_DIR/modules/$name"
         git -C "$CORE_DIR/modules/$name" checkout --detach "$commit"
       done
