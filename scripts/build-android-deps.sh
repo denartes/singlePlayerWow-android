@@ -235,7 +235,7 @@ EOF
 # functions in this script, this has not been validated by a successful CI
 # run yet and is the most likely piece to need iteration.
 build_mariadb_server() {
-    local archive source host_build host_import build mariadbd client_cli histlib pcre_cmake
+    local archive source host_build host_import build mariadbd client_cli histlib pcre_cmake top_cmake matches
     echo "[deps] MariaDB Server 10.11.9 (mariadbd)"
     archive="$(download https://archive.mariadb.org/mariadb-10.11.9/source/mariadb-10.11.9.tar.gz mariadb-10.11.9.tar.gz)"
     source="$(extract "$archive" mariadb-10.11.9)"
@@ -253,6 +253,16 @@ build_mariadb_server() {
     pcre_cmake="$source/cmake/pcre.cmake"
     if ! grep -q 'CMAKE_TOOLCHAIN_FILE=\${CMAKE_TOOLCHAIN_FILE}' "$pcre_cmake"; then
         sed -i 's/"-DPCRE2_BUILD_TESTS=OFF"/"-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}"\n      "-DANDROID_ABI=${ANDROID_ABI}"\n      "-DANDROID_PLATFORM=${ANDROID_PLATFORM}"\n      "-DPCRE2_BUILD_TESTS=OFF"/' "$pcre_cmake"
+    fi
+    # MariaDB 10.11 has no WITHOUT_CLIENT/WITH_CLIENT option: client/ is added
+    # unconditionally and needs curses.h, which isn't visible in this
+    # cross-build. Skip the whole subdirectory entirely when cross-compiling;
+    # only mariadbd (from sql/) is needed, none of the client/ tools are used.
+    top_cmake="$source/CMakeLists.txt"
+    if ! grep -q 'bygdok-android-skip' "$top_cmake"; then
+        matches="$(grep -cE '^[[:space:]]*ADD_SUBDIRECTORY\(client\)[[:space:]]*$' "$top_cmake")"
+        test "$matches" -eq 1 || { echo "Expected exactly one top-level ADD_SUBDIRECTORY(client) in MariaDB CMakeLists.txt, found $matches" >&2; exit 1; }
+        perl -0777 -pi -e 's/^[ \t]*ADD_SUBDIRECTORY\(client\)[ \t]*$/IF(NOT ANDROID)\n  ADD_SUBDIRECTORY(client) # bygdok-android-skip\nENDIF()/m' "$top_cmake"
     fi
     host_build="$SOURCE_DIR/mariadb-host-build"
     host_import="$host_build/import_executables.cmake"
@@ -316,9 +326,6 @@ build_mariadb_server() {
             -DCURSES_INCLUDE_DIR="$PREFIX/include/ncursesw" \
             -DCURSES_LIBRARY="$PREFIX/lib/libncurses.so" \
             -DWITH_WSREP=OFF \
-            -DWITHOUT_CLIENT=ON \
-            -DWITH_CLIENT=OFF \
-            -DWITHOUT_TESTS=ON \
             -DWITHOUT_TOKUDB=1 -DWITHOUT_ROCKSDB=1 -DWITHOUT_MROONGA=1 \
             -DWITHOUT_OQGRAPH=1 -DWITHOUT_SPHINX=1 -DWITHOUT_SPIDER=1 \
             -DWITHOUT_CONNECT=1 -DWITHOUT_COLUMNSTORE=1 -DWITHOUT_S3=1 \
