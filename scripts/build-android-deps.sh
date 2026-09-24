@@ -150,7 +150,7 @@ build_xz() {
 build_ncurses() {
     local archive source
     echo "[deps] ncurses 6.5"
-    archive="$(download https://invisible-mirror.net/archives/ncurses/ncurses-6.5.tar.gz ncurses-6.5.tar.gz)"
+    archive="$(download https://ftp.gnu.org/gnu/ncurses/ncurses-6.5.tar.gz ncurses-6.5.tar.gz 136d91bc269a9a5785e5f9e980bc76ab57428f604ce3e5a5a90cebc767971cc6)"
     source="$(extract "$archive" ncurses-6.5)"
     if [ ! -f "$PREFIX/lib/libncursesw.so" ]; then
         pushd "$source" >/dev/null
