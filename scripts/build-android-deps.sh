@@ -27,17 +27,29 @@ export CXXFLAGS="-fPIC"
 export LDFLAGS="-L$PREFIX/lib -Wl,-rpath-link,$PREFIX/lib"
 
 download() {
-    local url="$1" name="$2"
+    local url="$1" name="$2" expected_sha256="${3:-}"
     local archive="$SOURCE_DIR/$name"
+    local temporary="$archive.part"
+    if [ -f "$archive" ] && [ -n "$expected_sha256" ] && ! echo "$expected_sha256  $archive" | sha256sum --check --status; then
+        echo "Discarding cached archive with invalid checksum: $archive" >&2
+        rm -f "$archive"
+    fi
     if [ ! -f "$archive" ]; then
-        if ! curl --fail --location --retry 3 --output "$archive" "$url"; then
-            rm -f "$archive"
+        rm -f "$temporary"
+        if ! curl --fail --location --retry 3 --output "$temporary" "$url"; then
+            rm -f "$temporary"
             echo "Failed to download $url" >&2
             return 1
         fi
+        mv "$temporary" "$archive"
     fi
     if [ ! -s "$archive" ]; then
         echo "Downloaded archive is missing or empty: $archive" >&2
+        return 1
+    fi
+    if [ -n "$expected_sha256" ] && ! echo "$expected_sha256  $archive" | sha256sum --check --status; then
+        rm -f "$archive"
+        echo "Downloaded archive checksum failed: $archive" >&2
         return 1
     fi
     printf '%s\n' "$archive"
@@ -45,13 +57,26 @@ download() {
 
 extract() {
     local archive="$1" directory="$2"
-    if [ ! -d "$SOURCE_DIR/$directory" ]; then
+    local marker="$SOURCE_DIR/$directory/.bygdok-extracted"
+    local -a extract_command
+    if [ ! -f "$marker" ]; then
+        rm -rf "$SOURCE_DIR/$directory"
         case "$archive" in
-            *.tar.gz|*.tgz) tar -xzf "$archive" -C "$SOURCE_DIR" ;;
-            *.tar.xz) tar -xJf "$archive" -C "$SOURCE_DIR" ;;
-            *.tar.bz2) tar -xjf "$archive" -C "$SOURCE_DIR" ;;
+            *.tar.gz|*.tgz) extract_command=(tar -xzf "$archive" -C "$SOURCE_DIR") ;;
+            *.tar.xz) extract_command=(tar -xJf "$archive" -C "$SOURCE_DIR") ;;
+            *.tar.bz2) extract_command=(tar -xjf "$archive" -C "$SOURCE_DIR") ;;
             *) echo "Unsupported source archive: $archive" >&2; exit 1 ;;
         esac
+        if ! "${extract_command[@]}"; then
+            rm -rf "$SOURCE_DIR/$directory"
+            echo "Failed to extract source archive: $archive" >&2
+            return 1
+        fi
+        test -d "$SOURCE_DIR/$directory" || {
+            echo "Archive did not create expected directory: $SOURCE_DIR/$directory" >&2
+            return 1
+        }
+        touch "$marker"
     fi
     printf '%s\n' "$SOURCE_DIR/$directory"
 }
@@ -72,7 +97,7 @@ cmake_build() {
 build_zlib() {
     local archive source
     echo "[deps] zlib 1.3.1"
-    archive="$(download https://zlib.net/fossils/zlib-1.3.1.tar.gz zlib-1.3.1.tar.gz)"
+    archive="$(download https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz zlib-1.3.1.tar.gz 9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23)"
     source="$(extract "$archive" zlib-1.3.1)"
     if [ ! -f "$PREFIX/lib/libz.so" ]; then
         cmake_build "$source" "$SOURCE_DIR/zlib-build" -DBUILD_SHARED_LIBS=ON
