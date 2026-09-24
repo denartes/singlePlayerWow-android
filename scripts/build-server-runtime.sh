@@ -150,6 +150,7 @@ cp "$INSTALL_DIR/bin/worldserver" "$OUTPUT_DIR/bin/"
 
 cp "$MARIADB_RUNTIME_DIR/bin/mariadbd" "$OUTPUT_DIR/bin/"
 cp "$MARIADB_RUNTIME_DIR/bin/mariadb" "$OUTPUT_DIR/bin/mariadb_client"
+chmod +x "$OUTPUT_DIR/bin/mariadbd" "$OUTPUT_DIR/bin/mariadb_client"
 cp -a "$MARIADB_RUNTIME_DIR/lib/." "$OUTPUT_DIR/lib/"
 cp -a "$MARIADB_RUNTIME_DIR/share/." "$OUTPUT_DIR/share/"
 

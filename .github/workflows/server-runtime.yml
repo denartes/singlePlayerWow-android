@@ -116,6 +116,9 @@ jobs:
 
       - name: Validate MariaDB runtime
         run: |
+          test -s runtime/build/mariadb-arm64/bin/mariadbd
+          test -s runtime/build/mariadb-arm64/bin/mariadb
+          chmod +x runtime/build/mariadb-arm64/bin/mariadbd runtime/build/mariadb-arm64/bin/mariadb
           test -x runtime/build/mariadb-arm64/bin/mariadbd
           test -x runtime/build/mariadb-arm64/bin/mariadb
           test -s runtime/build/mariadb-arm64/share/mysql_system_tables.sql
@@ -125,6 +128,7 @@ jobs:
         run: |
           cp runtime/build/mariadb-arm64/bin/mariadbd "${ANDROID_DEPS_PREFIX}/lib/mariadbd"
           cp runtime/build/mariadb-arm64/bin/mariadb "${ANDROID_DEPS_PREFIX}/lib/mariadb_client"
+          chmod +x "${ANDROID_DEPS_PREFIX}/lib/mariadbd" "${ANDROID_DEPS_PREFIX}/lib/mariadb_client"
           cp -a runtime/build/mariadb-arm64/lib/. "${ANDROID_DEPS_PREFIX}/lib/"
 
       - name: Cache AzerothCore source and build
