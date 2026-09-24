@@ -1,0 +1,92 @@
+name: MariaDB Android Runtime
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_API: '30'
+      ANDROID_ABI: arm64-v8a
+      ANDROID_NDK_VERSION: 29.0.14206865
+      ANDROID_DEPS_PREFIX: ${{ github.workspace }}/.ci/bygdok-android-deps
+      ANDROID_DEPS_SOURCE_DIR: ${{ github.workspace }}/.ci/bygdok-android-deps-src
+      MARIADB_SOURCE_DIR: ${{ github.workspace }}/.ci/bygdok-mariadb-src
+      MARIADB_RUNTIME_OUTPUT_DIR: ${{ github.workspace }}/runtime/build/mariadb-arm64
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Android SDK
+        shell: bash
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "$SDK_ROOT"
+          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -name sdkmanager -type f -print -quit)"
+          test -n "$SDKMANAGER"
+          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+
+      - name: Install Android NDK
+        run: sdkmanager "ndk;${ANDROID_NDK_VERSION}"
+
+      - name: Export Android NDK path
+        run: echo "ANDROID_NDK_ROOT=${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            bison cmake file git make ninja-build patchelf perl pkg-config \
+            libncurses-dev libreadline-dev libssl-dev
+
+      - name: Cache Android native dependencies
+        id: android-deps-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.ANDROID_DEPS_PREFIX }}
+            ${{ env.ANDROID_DEPS_SOURCE_DIR }}
+          key: android-base-deps-${{ runner.os }}-${{ env.ANDROID_NDK_VERSION }}-${{ env.ANDROID_API }}-${{ env.ANDROID_ABI }}-${{ hashFiles('scripts/build-android-deps.sh') }}
+
+      - name: Build Android native dependencies
+        if: steps.android-deps-cache.outputs.cache-hit != 'true'
+        run: bash scripts/build-android-deps.sh
+
+      - name: Cache MariaDB Android runtime
+        id: mariadb-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.MARIADB_SOURCE_DIR }}
+            ${{ env.MARIADB_RUNTIME_OUTPUT_DIR }}
+          key: mariadb-runtime-${{ runner.os }}-${{ env.ANDROID_NDK_VERSION }}-${{ env.ANDROID_API }}-${{ env.ANDROID_ABI }}-${{ hashFiles('scripts/build-mariadb-runtime.sh', 'patches/mariadb-10.11.9/**') }}
+
+      - name: Build MariaDB Android runtime
+        if: steps.mariadb-cache.outputs.cache-hit != 'true'
+        run: bash scripts/build-mariadb-runtime.sh
+
+      - name: Inspect MariaDB runtime
+        shell: bash
+        run: |
+          file runtime/build/mariadb-arm64/bin/mariadbd
+          file runtime/build/mariadb-arm64/bin/mariadb
+          "${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -h -l -d runtime/build/mariadb-arm64/bin/mariadbd
+          "${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -h -l -d runtime/build/mariadb-arm64/bin/mariadb
+          find runtime/build/mariadb-arm64/lib -maxdepth 1 -type f -printf '%f\n' | sort
+
+      - name: Validate MariaDB runtime completeness
+        run: |
+          test -f runtime/build/mariadb-arm64/.build-complete
+          test -x runtime/build/mariadb-arm64/bin/mariadbd
+          test -x runtime/build/mariadb-arm64/bin/mariadb
+          test -s runtime/build/mariadb-arm64/share/mysql_system_tables.sql
+          test -n "$(find runtime/build/mariadb-arm64/lib -name '*.so' -type f -print -quit)"
+
+      - name: Upload MariaDB runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: bygdok-mariadb-arm64
+          path: runtime/build/mariadb-arm64

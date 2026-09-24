@@ -46,6 +46,7 @@ public:
         PLAYERHOOK_ON_LOGOUT,
         PLAYERHOOK_ON_DELETE,
         PLAYERHOOK_ON_EQUIP,
+        PLAYERHOOK_ON_STORE_NEW_ITEM,
         PLAYERHOOK_ON_AFTER_MOVE_ITEM_FROM_INVENTORY,
         PLAYERHOOK_ON_PLAYER_COMPLETE_QUEST,
         PLAYERHOOK_ON_LEARN_SPELL,
@@ -94,6 +95,14 @@ public:
 
 // Re-evaluate the stored appearance against the newly equipped item.
     void OnPlayerEquip(Player* player, Item* item, uint8, uint8, bool) override
+    {
+        if (!item)
+            return;
+
+        CollectAppearance(player, item->GetTemplate()->ItemId, true);
+    }
+
+    void OnPlayerStoreNewItem(Player* player, Item* item, uint32) override
     {
         if (!item)
             return;

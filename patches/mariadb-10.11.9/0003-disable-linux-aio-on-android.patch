@@ -1,0 +1,11 @@
+--- a/tpool/tpool_generic.cc
++++ b/tpool/tpool_generic.cc
+@@ -311,7 +311,7 @@
+   aio *create_native_aio(int max_io) override
+   {
+ #ifdef _WIN32
+     return create_win_aio(this, max_io);
+-#elif defined(__linux__)
++#elif defined(__linux__) && !defined(__ANDROID__)
+     return create_linux_aio(this,max_io);
+ #else

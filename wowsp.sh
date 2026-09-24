@@ -412,6 +412,9 @@ cd "$SOURCE_DIR/modules"
 
 # Remove existing modules to ensure clean state
 rm -rf mod-* 2>/dev/null || true
+rm -rf mod-random-enchants mod-auto-revive mod-autobalance mod-learnspells \
+    mod-npc-beastmaster mod-quick-teleport mod-racial-trait-swap \
+    mod-reward-played-time 2>/dev/null || true
 
 echo "Cloning required modules (this may take a few minutes)..."
 
@@ -420,12 +423,10 @@ MODULES=(
     "https://github.com/liyunfan1223/mod-playerbots.git"
 	"https://github.com/DustinHendrickson/mod-player-bot-level-brackets"
 	"https://github.com/ZhengPeiRu21/mod-individual-progression.git"
-        "https://github.com/azerothcore/mod-random-enchants"
     "https://github.com/azerothcore/mod-1v1-arena"
     "https://github.com/azerothcore/mod-account-achievements"
-    "https://github.com/NathanHandley/mod-ah-bot"
-    "https://github.com/azerothcore/mod-auto-revive"
-    "https://github.com/azerothcore/mod-autobalance"
+    "https://github.com/azerothcore/mod-aoe-loot"
+    "https://github.com/NathanHandley/mod-ah-bot-plus"
     "https://github.com/azerothcore/mod-better-item-reloading"
     "https://github.com/azerothcore/mod-boss-announcer"
     "https://github.com/azerothcore/mod-desertion-warnings"
@@ -438,10 +439,8 @@ MODULES=(
     "https://github.com/azerothcore/mod-individual-xp"
     "https://github.com/azerothcore/mod-instance-reset"
     "https://github.com/noisiver/mod-junk-to-gold"
-    "https://github.com/noisiver/mod-learnspells"
     "https://github.com/azerothcore/mod-low-level-rbg"
     "https://github.com/azerothcore/mod-morphsummon"
-    "https://github.com/azerothcore/mod-npc-beastmaster"
     "https://github.com/azerothcore/mod-npc-buffer"
     "https://github.com/azerothcore/mod-npc-enchanter"
     "https://github.com/Gozzim/mod-npc-spectator"
@@ -449,11 +448,8 @@ MODULES=(
     "https://github.com/azerothcore/mod-phased-duels"
     "https://github.com/azerothcore/mod-pvp-titles"
     "https://github.com/azerothcore/mod-queue-list-cache"
-    "https://github.com/azerothcore/mod-quick-teleport"
-    "https://github.com/azerothcore/mod-racial-trait-swap"
     "https://github.com/azerothcore/mod-rdf-expansion"
     "https://github.com/ZhengPeiRu21/mod-reagent-bank"
-    "https://github.com/azerothcore/mod-reward-played-time"
     "https://github.com/azerothcore/mod-solo-lfg"
     "https://github.com/azerothcore/mod-top-arena"
     "https://github.com/Stefan2102/mod-transmog-plus"

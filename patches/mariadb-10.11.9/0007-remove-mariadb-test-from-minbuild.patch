@@ -1,0 +1,10 @@
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -597,7 +597,6 @@
+    mariadb-plugin
+    mariadb-show
+    mariadb-slap
+-   mariadb-test
+    mariadb-tzinfo-to-sql
+    mariadb-upgrade
+    mariadbd

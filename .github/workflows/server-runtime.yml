@@ -1,0 +1,157 @@
+name: Server Runtime
+
+on:
+  pull_request:
+    paths:
+      - "modules/**"
+      - "configs/**"
+      - "*.sh"
+      - "runtime/**"
+      - "patches/mariadb-10.11.9/**"
+      - ".github/workflows/mariadb-runtime.yml"
+      - ".github/workflows/server-runtime.yml"
+      - "scripts/build-mariadb-runtime.sh"
+      - "scripts/build-server-runtime.sh"
+  push:
+    branches:
+      - main
+    paths:
+      - "modules/**"
+      - "configs/**"
+      - "*.sh"
+      - "runtime/**"
+      - "patches/mariadb-10.11.9/**"
+      - ".github/workflows/mariadb-runtime.yml"
+      - ".github/workflows/server-runtime.yml"
+      - "scripts/build-mariadb-runtime.sh"
+      - "scripts/build-server-runtime.sh"
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  mariadb-runtime:
+    uses: ./.github/workflows/mariadb-runtime.yml
+
+  build:
+    runs-on: ubuntu-latest
+    needs: mariadb-runtime
+    env:
+      ANDROID_API: '30'
+      ANDROID_ABI: arm64-v8a
+      ANDROID_NDK_VERSION: 29.0.14206865
+      ANDROID_DEPS_PREFIX: ${{ github.workspace }}/.ci/bygdok-android-deps
+      ANDROID_DEPS_SOURCE_DIR: ${{ github.workspace }}/.ci/bygdok-android-deps-src
+      CORE_DIR: ${{ github.workspace }}/.ci/azerothcore-android
+      BUILD_DIR: ${{ github.workspace }}/.ci/azerothcore-build
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        shell: bash
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "$SDK_ROOT"
+          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -name sdkmanager -type f -print -quit)"
+          test -n "$SDKMANAGER"
+          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
+          echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          "$SDKMANAGER" --version
+
+      - name: Install Android NDK
+        run: sdkmanager "ndk;${ANDROID_NDK_VERSION}"
+
+      - name: Export Android NDK path
+        run: echo "ANDROID_NDK_ROOT=${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Install server build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            cmake ninja-build git make perl \
+            libncurses-dev libreadline-dev
+
+      - name: Cache Android native dependencies
+        id: android-deps-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.ANDROID_DEPS_PREFIX }}
+            ${{ env.ANDROID_DEPS_SOURCE_DIR }}
+          key: android-base-deps-${{ runner.os }}-${{ env.ANDROID_NDK_VERSION }}-${{ env.ANDROID_API }}-${{ env.ANDROID_ABI }}-${{ hashFiles('scripts/build-android-deps.sh') }}
+
+      - name: Check Android dependency completion
+        run: |
+          echo "Android deps cache hit: ${{ steps.android-deps-cache.outputs.cache-hit }}"
+          if [ -f "${ANDROID_DEPS_PREFIX}/.build-complete" ]; then
+            echo "Android dependency completion marker present"
+            echo "ANDROID_DEPS_COMPLETE=true" >> "$GITHUB_ENV"
+          else
+            echo "Android dependency completion marker missing"
+            echo "ANDROID_DEPS_COMPLETE=false" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build Android native dependencies
+        if: env.ANDROID_DEPS_COMPLETE != 'true'
+        run: bash scripts/build-android-deps.sh
+
+      - name: Export staged dependency paths
+        run: |
+          echo "BYGDOK_ANDROID_MYSQL_ROOT=${ANDROID_DEPS_PREFIX}/mysql" >> "$GITHUB_ENV"
+          echo "BYGDOK_ANDROID_RUNTIME_LIB_DIR=${ANDROID_DEPS_PREFIX}/lib" >> "$GITHUB_ENV"
+          echo "BYGDOK_MARIADB_RUNTIME_DIR=${GITHUB_WORKSPACE}/runtime/build/mariadb-arm64" >> "$GITHUB_ENV"
+
+      - name: Download MariaDB runtime
+        uses: actions/download-artifact@v4
+        with:
+          name: bygdok-mariadb-arm64
+          path: runtime/build/mariadb-arm64
+
+      - name: Validate MariaDB runtime
+        run: |
+          test -s runtime/build/mariadb-arm64/bin/mariadbd
+          test -s runtime/build/mariadb-arm64/bin/mariadb
+          chmod +x runtime/build/mariadb-arm64/bin/mariadbd runtime/build/mariadb-arm64/bin/mariadb
+          test -x runtime/build/mariadb-arm64/bin/mariadbd
+          test -x runtime/build/mariadb-arm64/bin/mariadb
+          test -s runtime/build/mariadb-arm64/share/mysql_system_tables.sql
+          test -n "$(find runtime/build/mariadb-arm64/lib -name '*.so' -type f -print -quit)"
+
+      - name: Stage MariaDB runtime
+        run: |
+          cp runtime/build/mariadb-arm64/bin/mariadbd "${ANDROID_DEPS_PREFIX}/lib/mariadbd"
+          cp runtime/build/mariadb-arm64/bin/mariadb "${ANDROID_DEPS_PREFIX}/lib/mariadb_client"
+          chmod +x "${ANDROID_DEPS_PREFIX}/lib/mariadbd" "${ANDROID_DEPS_PREFIX}/lib/mariadb_client"
+          cp -a runtime/build/mariadb-arm64/lib/. "${ANDROID_DEPS_PREFIX}/lib/"
+
+      - name: Cache AzerothCore source and build
+        id: server-build-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.CORE_DIR }}
+            ${{ env.BUILD_DIR }}
+          key: server-build-${{ runner.os }}-${{ env.ANDROID_NDK_VERSION }}-${{ env.ANDROID_API }}-${{ env.ANDROID_ABI }}-${{ hashFiles('wowsp_cutoff.sh', 'scripts/build-server-runtime.sh', 'scripts/build-android-deps.sh', 'scripts/build-mariadb-runtime.sh', 'patches/mariadb-10.11.9/**', 'modules/**', 'configs/**') }}
+          restore-keys: |
+            server-build-${{ runner.os }}-${{ env.ANDROID_NDK_VERSION }}-${{ env.ANDROID_API }}-${{ env.ANDROID_ABI }}-
+
+      - name: Export server build cache status
+        run: |
+          echo "Server build exact cache hit: ${{ steps.server-build-cache.outputs.cache-hit }}"
+          echo "SERVER_BUILD_CACHE_HIT=${{ steps.server-build-cache.outputs.cache-hit }}" >> "$GITHUB_ENV"
+
+      - name: Build and package server runtime
+        run: bash scripts/build-server-runtime.sh
+
+      - name: Upload server runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: bygdok-runtime-arm64
+          path: runtime/build/bygdok-runtime-arm64

@@ -1,0 +1,12 @@
+--- a/cmake/mariadb_connector_c.cmake
++++ b/cmake/mariadb_connector_c.cmake
+@@ -18,7 +18,7 @@
+ IF(SSL_DEFINES MATCHES "WOLFSSL")
+   IF(WIN32)
+     SET(CONC_WITH_SSL "SCHANNEL")
+   ELSE()
+-    SET(CONC_WITH_SSL "GNUTLS") # that's what debian wants, right?
++    SET(CONC_WITH_SSL "OPENSSL")
+   ENDIF()
+ ELSE()
+   SET(CONC_WITH_SSL "OPENSSL")

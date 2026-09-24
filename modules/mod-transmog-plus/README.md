@@ -7,7 +7,7 @@ Appearances are stored per slot (not per item), so your look stays when you swap
 
 - Slot-based transmog -- appearances stay on the equipment slot when you swap gear.
 - Account-wide collection -- any appearance unlocked by one character is available account-wide.
-- Appearances unlock when you equip an item.
+- Appearances unlock when an eligible item enters your inventory, regardless of whether your character can equip it.
 - Option to hide individual armor slots (helm, shoulders, chest, etc.).
 
 
